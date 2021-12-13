@@ -15,7 +15,7 @@ import hashlib
 import json
 import logging
 import subprocess
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, Optional
 
 from matrix_common.json import JsonDict
 
@@ -33,7 +33,7 @@ class Scanner:
         self._exit_codes_to_ignore = mcs.config.scan.do_not_cache_exit_codes
         self._removal_command = mcs.config.scan.removal_command
 
-    async def scan_file(self, media_path: str, metadata: JsonDict) -> bool:
+    async def scan_file(self, media_path: str, metadata: Optional[JsonDict]) -> bool:
         """Download and scan the given media.
 
         Unless the scan fails with one of the codes listed in `do_not_cache_exit_codes`,
@@ -45,7 +45,7 @@ class Scanner:
         Args:
             media_path: The `server_name/media_id` path for the media.
             metadata: The metadata attached to the file (e.g. thumbnail sources,
-                decryption key), or an empty dict if the file isn't encrypted.
+                decryption key), or None if the file isn't encrypted.
 
         Returns:
             Whether the scan succeeded, i.e. whether the script returned with a 0 exit
@@ -60,7 +60,7 @@ class Scanner:
             return self._result_cache[cache_key]
 
         # Download and scan the file.
-        file_path = await self._file_downloader.download_file(media_path)
+        file_path = await self._file_downloader.download_file(media_path, metadata)
         exit_code = self._run_scan(file_path)
         result = exit_code == 0
 
@@ -69,6 +69,7 @@ class Scanner:
             self._exit_codes_to_ignore is None
             or exit_code not in self._exit_codes_to_ignore
         ):
+            logger.info("Scan returned exit code %d which must not be cached", exit_code)
             self._result_cache[cache_key] = result
 
         # Delete the file now that we've scanned it.
@@ -78,7 +79,11 @@ class Scanner:
 
         return result
 
-    def _get_cache_key_for_file(self, media_path: str, metadata: JsonDict) -> str:
+    def _get_cache_key_for_file(
+        self,
+        media_path: str,
+        metadata: Optional[JsonDict],
+    ) -> str:
         """Generates the key to use to store the result for the given media in the result
         cache.
 
@@ -88,7 +93,7 @@ class Scanner:
 
         Args:
             media_path: The `server_name/media_id` path of the file to scan.
-            metadata: The file's metadata (or an empty dict if the file isn't encrypted).
+            metadata: The file's metadata (or None if the file isn't encrypted).
         """
         raw_metadata = json.dumps(metadata)
         base_string = media_path + raw_metadata
@@ -105,6 +110,7 @@ class Scanner:
         """
         try:
             subprocess.run([self._script, file_name])
+            logger.info("Scan succeeded")
             return 0
         except subprocess.CalledProcessError as e:
             logger.info("Scan failed with exit code %d: %s", e.returncode, e.stderr)

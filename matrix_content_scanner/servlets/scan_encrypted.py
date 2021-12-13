@@ -11,6 +11,7 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
+import json
 from typing import TYPE_CHECKING
 
 from matrix_common.servlet import json_servlet_async
@@ -21,15 +22,19 @@ if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner
 
 
-class ScanServlet(Resource):
-    isLeaf = True
-
+class ScanEncryptedServlet(Resource):
     def __init__(self, content_scanner: "MatrixContentScanner"):
         super().__init__()
         self._scanner = content_scanner.scanner
 
     @json_servlet_async
-    async def render_GET(self, request: Request):
-        media_path: bytes = b"/".join(request.postpath)
-        result = await self._scanner.scan_file(media_path.decode("ascii"), None)
+    async def render_POST(self, request: Request):
+        body = request.content.read().decode("ascii")
+        metadata = json.loads(body)
+
+        # TODO: validate schema
+        url = metadata["file"]["url"]
+        media_path = url[len("mxc://"):]
+
+        result = await self._scanner.scan_file(media_path, metadata)
         return {"clean": result}
