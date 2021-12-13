@@ -73,6 +73,7 @@ class Scanner:
             self._result_cache[cache_key] = result
 
         # Delete the file now that we've scanned it.
+        logger.info("Scan has finished, removing file")
         removal_command_parts = self._removal_command.split()
         removal_command_parts.append(file_path)
         subprocess.run(removal_command_parts)

@@ -22,7 +22,7 @@ from mautrix.crypto.attachments import decrypt_attachment
 from twisted.web.client import Agent, readBody
 from twisted.web.iweb import IResponse
 
-from matrix_content_scanner.utils import ErrCodes
+from matrix_content_scanner.utils.encrypted_files import ErrCodes
 
 if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner
@@ -98,12 +98,10 @@ class FileDownloader:
         """
         logger.info("File is encrypted, decrypting")
 
-        # TODO: validate schema
         key = metadata["file"]["key"]["k"]
         hash = metadata["file"]["hashes"]["sha256"]
         iv = metadata["file"]["iv"]
 
-        # TODO: Handle EncryptionError from mautrix
         return decrypt_attachment(body, key, hash, iv)
 
     def _build_https_url(self, media_path: str, endpoint_version: str = "v3") -> str:

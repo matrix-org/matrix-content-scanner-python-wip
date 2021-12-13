@@ -18,6 +18,10 @@ from matrix_common.servlet import json_servlet_async
 from twisted.web.http import Request
 from twisted.web.resource import Resource
 
+from matrix_content_scanner.utils.encrypted_file_metadata import (
+    validate_encrypted_file_metadata,
+)
+
 if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner
 
@@ -32,7 +36,8 @@ class ScanEncryptedServlet(Resource):
         body = request.content.read().decode("ascii")
         metadata = json.loads(body)
 
-        # TODO: validate schema
+        validate_encrypted_file_metadata(metadata)
+
         url = metadata["file"]["url"]
         media_path = url[len("mxc://"):]
 
