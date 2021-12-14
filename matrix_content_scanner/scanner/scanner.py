@@ -69,7 +69,9 @@ class Scanner:
             self._exit_codes_to_ignore is None
             or exit_code not in self._exit_codes_to_ignore
         ):
-            logger.info("Scan returned exit code %d which must not be cached", exit_code)
+            logger.info(
+                "Scan returned exit code %d which must not be cached", exit_code
+            )
             self._result_cache[cache_key] = result
 
         # Delete the file now that we've scanned it.

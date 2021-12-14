@@ -11,12 +11,11 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-from jsonschema import validate, ValidationError
+from jsonschema import ValidationError, validate
 from matrix_common.json import JsonDict
 from matrix_common.servlet import MatrixRestError
 
 from matrix_content_scanner.utils.constants import ErrCodes
-
 
 # This is a subset of the content of a m.room.message event that includes a file, with
 # only the info that we need to locate and decrypt the file.
@@ -69,7 +68,7 @@ def _validate(body: JsonDict):
 
     key_ops = body["file"]["key"]["key_ops"]
     if not set(key_ops).issuperset({"encrypt", "decrypt"}):
-        raise ValueError("key_ops must contain at least \"encrypt\" and \"decrypt\"")
+        raise ValueError('key_ops must contain at least "encrypt" and "decrypt"')
 
 
 def validate_encrypted_file_metadata(body: JsonDict):

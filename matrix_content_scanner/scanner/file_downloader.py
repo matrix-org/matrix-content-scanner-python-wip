@@ -22,7 +22,7 @@ from mautrix.crypto.attachments import decrypt_attachment
 from twisted.web.client import Agent, readBody
 from twisted.web.iweb import IResponse
 
-from matrix_content_scanner.utils.encrypted_files import ErrCodes
+from matrix_content_scanner.utils.constants import ErrCodes
 
 if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner
@@ -98,6 +98,8 @@ class FileDownloader:
         """
         logger.info("File is encrypted, decrypting")
 
+        # At this point the schema should have been validated so we can pull these values
+        # out safely.
         key = metadata["file"]["key"]["k"]
         hash = metadata["file"]["hashes"]["sha256"]
         iv = metadata["file"]["iv"]
