@@ -12,13 +12,9 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import logging
-import os
-import os.path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
-from matrix_common.json import JsonDict
 from matrix_common.servlet import MatrixRestError
-from mautrix.crypto.attachments import decrypt_attachment
 from twisted.web.client import Agent, readBody
 from twisted.web.iweb import IResponse
 
@@ -46,14 +42,12 @@ class FileDownloader:
         self._agent = Agent(mcs.reactor)
         self._store_directory = mcs.config.scan.temp_directory
 
-    async def download_file(self, media_path: str, metadata: Optional[JsonDict]) -> str:
+    async def download_file(self, media_path: str) -> str:
         """Retrieve the file with the given `server_name/media_id` path, and stores it on
         disk.
 
         Args:
             media_path: The path identifying the media to retrieve.
-            metadata: The metadata attached to the file (e.g. thumbnail sources,
-                decryption key), or None if the file isn't encrypted.
 
         Returns:
             The path to the file on disk.
@@ -81,30 +75,7 @@ class FileDownloader:
                 # If that still failed, raise an error.
                 raise MatrixRestError(404, ErrCodes.FILE_NOT_FOUND, "File not found")
 
-        if metadata is not None:
-            body = self._decrypt_file(body, metadata)
-
-        return self._write_file_to_disk(media_path, body)
-
-    def _decrypt_file(self, body: bytes, metadata: JsonDict) -> bytes:
-        """Extract decryption information from the file's metadata and decrypt it.
-
-        Args:
-            body: The encrypted body of the file.
-            metadata: The part of the request that includes decryption information.
-
-        Returns:
-            The decrypted content of the file.
-        """
-        logger.info("File is encrypted, decrypting")
-
-        # At this point the schema should have been validated so we can pull these values
-        # out safely.
-        key = metadata["file"]["key"]["k"]
-        hash = metadata["file"]["hashes"]["sha256"]
-        iv = metadata["file"]["iv"]
-
-        return decrypt_attachment(body, key, hash, iv)
+        return body
 
     def _build_https_url(self, media_path: str, endpoint_version: str = "v3") -> str:
         """Turn a `server_name/media_id` path into an https:// one we can use to fetch
@@ -168,27 +139,3 @@ class FileDownloader:
             )
 
         return await readBody(resp)
-
-    def _write_file_to_disk(self, media_path: str, body: bytes) -> str:
-        """Writes the given content to disk. The final file name will be a concatenation
-        of `temp_directory` and the media's `server_name/media_id` path.
-
-        Args:
-            media_path: The `server_name/media_id` path of the media we're processing.
-            body: The bytes to write to disk.
-
-        Returns:
-            The full path to the newly written file.
-        """
-        # Figure out the full absolute path for this file.
-        full_path = os.path.abspath(os.path.join(self._store_directory, media_path))
-
-        logger.info("Writing file to %s", full_path)
-
-        # Create any directory we need.
-        os.makedirs(os.path.dirname(full_path), exist_ok=True)
-
-        with open(full_path, "wb") as fp:
-            fp.write(body)
-
-        return full_path

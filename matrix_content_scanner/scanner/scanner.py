@@ -14,10 +14,12 @@
 import hashlib
 import json
 import logging
+import os.path
 import subprocess
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 from matrix_common.json import JsonDict
+from mautrix.crypto.attachments import decrypt_attachment
 
 if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner
@@ -32,8 +34,13 @@ class Scanner:
         self._result_cache: Dict[str, bool] = {}
         self._exit_codes_to_ignore = mcs.config.scan.do_not_cache_exit_codes
         self._removal_command = mcs.config.scan.removal_command
+        self._store_directory = mcs.config.scan.temp_directory
 
-    async def scan_file(self, media_path: str, metadata: Optional[JsonDict]) -> bool:
+    async def scan_file(
+        self,
+        media_path: str,
+        metadata: Optional[JsonDict],
+    ) -> Tuple[bool, bytes]:
         """Download and scan the given media.
 
         Unless the scan fails with one of the codes listed in `do_not_cache_exit_codes`,
@@ -44,12 +51,12 @@ class Scanner:
 
         Args:
             media_path: The `server_name/media_id` path for the media.
-            metadata: The metadata attached to the file (e.g. thumbnail sources,
-                decryption key), or None if the file isn't encrypted.
+            metadata: The metadata attached to the file (e.g. decryption key), or None if
+                the file isn't encrypted.
 
         Returns:
-            Whether the scan succeeded, i.e. whether the script returned with a 0 exit
-            code.
+            A boolean indicating whether the scan succeeded, i.e. whether the script
+            returned with a 0 exit code, alongside the downloaded body of the file.
         """
         # Compute the cache key for the media.
         cache_key = self._get_cache_key_for_file(media_path, metadata)
@@ -59,8 +66,18 @@ class Scanner:
             logger.info("Returning cached result %s", self._result_cache[cache_key])
             return self._result_cache[cache_key]
 
-        # Download and scan the file.
-        file_path = await self._file_downloader.download_file(media_path, metadata)
+        # Download the file, and decrypt it if necessary.
+        file_body = await self._file_downloader.download_file(media_path)
+
+        if metadata is not None:
+            # If the file is encrypted, we need to decrypt it before we can scan it, but
+            # we also need to keep the encrypted body in memory in case we want to return
+            # it to the client.
+            decrypted_file_body = self._decrypt_file(file_body, metadata)
+            file_path = self._write_file_to_disk(media_path, decrypted_file_body)
+        else:
+            file_path = self._write_file_to_disk(media_path, file_body)
+
         exit_code = self._run_scan(file_path)
         result = exit_code == 0
 
@@ -80,7 +97,7 @@ class Scanner:
         removal_command_parts.append(file_path)
         subprocess.run(removal_command_parts)
 
-        return result
+        return result, file_body
 
     def _get_cache_key_for_file(
         self,
@@ -101,6 +118,50 @@ class Scanner:
         raw_metadata = json.dumps(metadata)
         base_string = media_path + raw_metadata
         return hashlib.sha256(base_string.encode("ascii")).hexdigest()
+
+    def _decrypt_file(self, body: bytes, metadata: JsonDict) -> bytes:
+        """Extract decryption information from the file's metadata and decrypt it.
+
+        Args:
+            body: The encrypted body of the file.
+            metadata: The part of the request that includes decryption information.
+
+        Returns:
+            The decrypted content of the file.
+        """
+        logger.info("File is encrypted, decrypting")
+
+        # At this point the schema should have been validated so we can pull these values
+        # out safely.
+        key = metadata["file"]["key"]["k"]
+        hash = metadata["file"]["hashes"]["sha256"]
+        iv = metadata["file"]["iv"]
+
+        return decrypt_attachment(body, key, hash, iv)
+
+    def _write_file_to_disk(self, media_path: str, body: bytes) -> str:
+        """Writes the given content to disk. The final file name will be a concatenation
+        of `temp_directory` and the media's `server_name/media_id` path.
+
+        Args:
+            media_path: The `server_name/media_id` path of the media we're processing.
+            body: The bytes to write to disk.
+
+        Returns:
+            The full path to the newly written file.
+        """
+        # Figure out the full absolute path for this file.
+        full_path = os.path.abspath(os.path.join(self._store_directory, media_path))
+
+        logger.info("Writing file to %s", full_path)
+
+        # Create any directory we need.
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+        with open(full_path, "wb") as fp:
+            fp.write(body)
+
+        return full_path
 
     def _run_scan(self, file_name: str) -> int:
         """Runs the scan script, passing it the given file name.

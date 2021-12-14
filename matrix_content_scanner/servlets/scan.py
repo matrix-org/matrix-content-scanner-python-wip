@@ -31,5 +31,5 @@ class ScanServlet(Resource):
     @json_servlet_async
     async def render_GET(self, request: Request):
         media_path: bytes = b"/".join(request.postpath)
-        result = await self._scanner.scan_file(media_path.decode("ascii"), None)
+        result, _ = await self._scanner.scan_file(media_path.decode("ascii"), None)
         return {"clean": result}

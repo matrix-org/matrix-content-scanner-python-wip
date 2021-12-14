@@ -41,5 +41,5 @@ class ScanEncryptedServlet(Resource):
         url = metadata["file"]["url"]
         media_path = url[len("mxc://") :]
 
-        result = await self._scanner.scan_file(media_path, metadata)
+        result, _ = await self._scanner.scan_file(media_path, metadata)
         return {"clean": result}
