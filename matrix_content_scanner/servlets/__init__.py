@@ -14,12 +14,11 @@
 import functools
 import logging
 import json
-from typing import Callable, Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from aiohttp import abc
 from twisted.internet import defer
 from twisted.python import failure
-from twisted.web import server
 from twisted.web.http import Request
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
