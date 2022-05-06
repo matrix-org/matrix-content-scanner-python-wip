@@ -12,9 +12,8 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 from jsonschema import ValidationError, validate
-from matrix_common.json import JsonDict
-from matrix_common.servlet import MatrixRestError
 
+from matrix_content_scanner.servlets import JsonDict, MatrixRestError
 from matrix_content_scanner.utils.constants import ErrCodes
 
 # This is a subset of the content of a m.room.message event that includes a file, with

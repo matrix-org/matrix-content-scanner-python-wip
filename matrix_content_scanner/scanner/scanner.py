@@ -18,8 +18,11 @@ import os.path
 import subprocess
 from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
-from matrix_common.json import JsonDict
+import attr
 from mautrix.crypto.attachments import decrypt_attachment
+
+from matrix_content_scanner.servlets import JsonDict
+from matrix_content_scanner.utils.types import MediaDescription
 
 if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner
@@ -27,11 +30,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+@attr.s(auto_attribs=True, frozen=True)
+class CacheEntry:
+    result: bool
+    media: MediaDescription
+
+
 class Scanner:
     def __init__(self, mcs: "MatrixContentScanner"):
         self._file_downloader = mcs.file_downloader
         self._script = mcs.config.scan.script
-        self._result_cache: Dict[str, bool] = {}
+        self._result_cache: Dict[str, CacheEntry] = {}
         self._exit_codes_to_ignore = mcs.config.scan.do_not_cache_exit_codes
         self._removal_command = mcs.config.scan.removal_command
         self._store_directory = mcs.config.scan.temp_directory
@@ -40,7 +49,7 @@ class Scanner:
         self,
         media_path: str,
         metadata: Optional[JsonDict],
-    ) -> Tuple[bool, bytes]:
+    ) -> Tuple[bool, MediaDescription]:
         """Download and scan the given media.
 
         Unless the scan fails with one of the codes listed in `do_not_cache_exit_codes`,
@@ -63,20 +72,21 @@ class Scanner:
 
         # Return the cached result if there's one.
         if cache_key in self._result_cache:
-            logger.info("Returning cached result %s", self._result_cache[cache_key])
-            return self._result_cache[cache_key]
+            cache_entry = self._result_cache[cache_key]
+            logger.info("Returning cached result %s", cache_entry.result)
+            return cache_entry.result, cache_entry.media
 
         # Download the file, and decrypt it if necessary.
-        file_body = await self._file_downloader.download_file(media_path)
+        media = await self._file_downloader.download_file(media_path)
 
         if metadata is not None:
             # If the file is encrypted, we need to decrypt it before we can scan it, but
             # we also need to keep the encrypted body in memory in case we want to return
             # it to the client.
-            decrypted_file_body = self._decrypt_file(file_body, metadata)
+            decrypted_file_body = self._decrypt_file(media.content, metadata)
             file_path = self._write_file_to_disk(media_path, decrypted_file_body)
         else:
-            file_path = self._write_file_to_disk(media_path, file_body)
+            file_path = self._write_file_to_disk(media_path, media.content)
 
         exit_code = self._run_scan(file_path)
         result = exit_code == 0
@@ -87,9 +97,16 @@ class Scanner:
             or exit_code not in self._exit_codes_to_ignore
         ):
             logger.info(
+                "Caching result %s", result
+            )
+            self._result_cache[cache_key] = CacheEntry(
+                result=result,
+                media=media,
+            )
+        else:
+            logger.info(
                 "Scan returned exit code %d which must not be cached", exit_code
             )
-            self._result_cache[cache_key] = result
 
         # Delete the file now that we've scanned it.
         logger.info("Scan has finished, removing file")
@@ -97,7 +114,7 @@ class Scanner:
         removal_command_parts.append(file_path)
         subprocess.run(removal_command_parts)
 
-        return result, file_body
+        return result, media
 
     def _get_cache_key_for_file(
         self,

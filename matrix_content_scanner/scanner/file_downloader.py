@@ -14,11 +14,12 @@
 import logging
 from typing import TYPE_CHECKING
 
-from matrix_common.servlet import MatrixRestError
 from twisted.web.client import Agent, readBody
 from twisted.web.iweb import IResponse
 
+from matrix_content_scanner.servlets import MatrixRestError
 from matrix_content_scanner.utils.constants import ErrCodes
+from matrix_content_scanner.utils.types import MediaDescription
 
 if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner
@@ -42,7 +43,7 @@ class FileDownloader:
         self._agent = Agent(mcs.reactor)
         self._store_directory = mcs.config.scan.temp_directory
 
-    async def download_file(self, media_path: str) -> str:
+    async def download_file(self, media_path: str) -> MediaDescription:
         """Retrieve the file with the given `server_name/media_id` path, and stores it on
         disk.
 
@@ -50,7 +51,7 @@ class FileDownloader:
             media_path: The path identifying the media to retrieve.
 
         Returns:
-            The path to the file on disk.
+            A description of the file (including its full content).
 
         Raises:
             MatrixRestError: The file was not found or could not be downloaded due to an
@@ -60,7 +61,7 @@ class FileDownloader:
 
         # Attempt to retrieve the file at the generated URL.
         try:
-            body = await self._get_file_content(url)
+            file = await self._get_file_content(url)
         except _MediaNotFoundException:
             # If the file could not be found, it might be because the homeserver hasn't
             # been upgraded to a version that supports Matrix v1.1 endpoints yet, so try
@@ -70,12 +71,12 @@ class FileDownloader:
             url = self._build_https_url(media_path, endpoint_version="r0")
 
             try:
-                body = await self._get_file_content(url)
+                file = await self._get_file_content(url)
             except _MediaNotFoundException:
                 # If that still failed, raise an error.
                 raise MatrixRestError(404, ErrCodes.FILE_NOT_FOUND, "File not found")
 
-        return body
+        return file
 
     def _build_https_url(self, media_path: str, endpoint_version: str = "v3") -> str:
         """Turn a `server_name/media_id` path into an https:// one we can use to fetch
@@ -106,14 +107,14 @@ class FileDownloader:
 
         return "%s/%s/%s/%s" % (base_url, path_prefix, server_name, media_id)
 
-    async def _get_file_content(self, url: str) -> bytes:
+    async def _get_file_content(self, url: str) -> MediaDescription:
         """Retrieve the content of the file at a given URL.
 
         Args:
             url: The URL to query.
 
         Returns:
-            The file's body.
+            A description of the file (including its full content).
 
         Raises:
             _MediaNotFoundException: the server returned a non-200 status that's not a
@@ -138,4 +139,16 @@ class FileDownloader:
                 "The remote server experienced an unknown error",
             )
 
-        return await readBody(resp)
+        content_type_headers = resp.headers.getRawHeaders("content-type")
+
+        if len(content_type_headers) != 1:
+            raise MatrixRestError(
+                502,
+                ErrCodes.UNKNOWN,
+                "The remote server responded with an invalid amount of Content-Type headers",
+            )
+
+        return MediaDescription(
+            content_type=content_type_headers[0],
+            content=await readBody(resp),
+        )

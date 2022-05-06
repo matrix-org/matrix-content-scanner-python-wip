@@ -17,8 +17,11 @@ from typing import TYPE_CHECKING
 from twisted.web.resource import Resource
 from twisted.web.server import Site
 
-from matrix_content_scanner.servlets.scan import ScanServlet
-from matrix_content_scanner.servlets.scan_encrypted import ScanEncryptedServlet
+from matrix_content_scanner.servlets.download import (
+    DownloadServlet,
+    DownloadEncryptedServlet,
+)
+from matrix_content_scanner.servlets.scan import ScanServlet, ScanEncryptedServlet
 
 if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner
@@ -47,6 +50,8 @@ class HTTPServer:
 
         unstable.putChild(b"scan", ScanServlet(self._mcs))
         unstable.putChild(b"scan_encrypted", ScanEncryptedServlet(self._mcs))
+        unstable.putChild(b"download", DownloadServlet(self._mcs))
+        unstable.putChild(b"download_encrypted", DownloadEncryptedServlet(self._mcs))
 
         return root
 

@@ -14,10 +14,9 @@
 import json
 from typing import TYPE_CHECKING
 
-from matrix_common.servlet import json_servlet_async
 from twisted.web.http import Request
-from twisted.web.resource import Resource
 
+from matrix_content_scanner.servlets import BytesResource
 from matrix_content_scanner.utils.encrypted_file_metadata import (
     validate_encrypted_file_metadata,
 )
@@ -26,13 +25,31 @@ if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner
 
 
-class ScanEncryptedServlet(Resource):
+class DownloadServlet(BytesResource):
+    isLeaf = True
+
     def __init__(self, content_scanner: "MatrixContentScanner"):
         super().__init__()
         self._scanner = content_scanner.scanner
 
-    @json_servlet_async
-    async def render_POST(self, request: Request):
+    async def on_GET(self, request: Request):
+        media_path: bytes = b"/".join(request.postpath)
+        result, media = await self._scanner.scan_file(media_path.decode("ascii"), None)
+        request.setHeader("Content-Type", media.content_type)
+        request.setHeader("Content-Length", str(len(media.content)))
+
+        if result is True:
+            return 200, media.content
+
+        return 403, {"info": "File not clean."}
+
+
+class DownloadEncryptedServlet(BytesResource):
+    def __init__(self, content_scanner: "MatrixContentScanner"):
+        super().__init__()
+        self._scanner = content_scanner.scanner
+
+    async def on_POST(self, request: Request):
         body = request.content.read().decode("ascii")
         metadata = json.loads(body)
 
@@ -41,5 +58,12 @@ class ScanEncryptedServlet(Resource):
         url = metadata["file"]["url"]
         media_path = url[len("mxc://") :]
 
-        result, _ = await self._scanner.scan_file(media_path, metadata)
-        return {"clean": result}
+        result, media = await self._scanner.scan_file(media_path, metadata)
+        request.setHeader("Content-Type", media.content_type)
+        request.setHeader("Content-Length", str(len(media.content)))
+
+        if result is True:
+            return 200, media.content
+
+        return 403, {"info": "File not clean."}
+
