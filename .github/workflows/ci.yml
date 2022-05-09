@@ -9,7 +9,7 @@ jobs:
     name: Check code style
     runs-on: ubuntu-latest
     steps:
-      - run: apt install libolm-dev
+      - run: sudo apt-get install -y libolm-dev
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
         with:
@@ -21,7 +21,7 @@ jobs:
     name: Check types with Mypy
     runs-on: ubuntu-latest
     steps:
-      - run: apt install libolm-dev
+      - run: sudo apt-get install -y libolm-dev
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
         with:
@@ -38,7 +38,7 @@ jobs:
         # and the newest stable.
         python_version: [ "3.7", "3.x" ]
     steps:
-      - run: apt install libolm-dev
+      - run: sudo apt-get install -y libolm-dev
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
         with:
