@@ -97,5 +97,6 @@ if __name__ == "__main__":
         }
     )
 
-    mcs = MatrixContentScanner(cfg, twisted.internet.reactor)
+    reactor: Reactor = twisted.internet.reactor  # type: ignore[assignment]
+    mcs = MatrixContentScanner(cfg, reactor)
     mcs.start()

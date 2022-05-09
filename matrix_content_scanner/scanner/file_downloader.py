@@ -141,7 +141,7 @@ class FileDownloader:
 
         content_type_headers = resp.headers.getRawHeaders("content-type")
 
-        if len(content_type_headers) != 1:
+        if content_type_headers is None or len(content_type_headers) != 1:
             raise MatrixRestError(
                 502,
                 ErrCodes.UNKNOWN,

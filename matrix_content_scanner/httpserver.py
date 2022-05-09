@@ -18,10 +18,10 @@ from twisted.web.resource import Resource
 from twisted.web.server import Site
 
 from matrix_content_scanner.servlets.download import (
-    DownloadServlet,
     DownloadEncryptedServlet,
+    DownloadServlet,
 )
-from matrix_content_scanner.servlets.scan import ScanServlet, ScanEncryptedServlet
+from matrix_content_scanner.servlets.scan import ScanEncryptedServlet, ScanServlet
 
 if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner

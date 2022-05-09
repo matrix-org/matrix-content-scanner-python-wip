@@ -12,11 +12,11 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Tuple, Union
 
 from twisted.web.http import Request
 
-from matrix_content_scanner.servlets import BytesResource
+from matrix_content_scanner.servlets import BytesResource, JsonDict
 from matrix_content_scanner.utils.encrypted_file_metadata import (
     validate_encrypted_file_metadata,
 )
@@ -32,8 +32,9 @@ class DownloadServlet(BytesResource):
         super().__init__()
         self._scanner = content_scanner.scanner
 
-    async def on_GET(self, request: Request):
-        media_path: bytes = b"/".join(request.postpath)
+    async def on_GET(self, request: Request) -> Tuple[int, Union[bytes, JsonDict]]:
+        # mypy doesn't recognise request.postpath but it does exist and is documented.
+        media_path: bytes = b"/".join(request.postpath)  # type: ignore[attr-defined]
         result, media = await self._scanner.scan_file(media_path.decode("ascii"), None)
         request.setHeader("Content-Type", media.content_type)
         request.setHeader("Content-Length", str(len(media.content)))
@@ -49,7 +50,8 @@ class DownloadEncryptedServlet(BytesResource):
         super().__init__()
         self._scanner = content_scanner.scanner
 
-    async def on_POST(self, request: Request):
+    async def on_POST(self, request: Request) -> Tuple[int, Union[bytes, JsonDict]]:
+        assert request.content is not None
         body = request.content.read().decode("ascii")
         metadata = json.loads(body)
 
@@ -66,4 +68,3 @@ class DownloadEncryptedServlet(BytesResource):
             return 200, media.content
 
         return 403, {"info": "File not clean."}
-

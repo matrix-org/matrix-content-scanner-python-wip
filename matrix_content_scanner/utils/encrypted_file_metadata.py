@@ -52,7 +52,7 @@ _encrypted_file_metadata_schema = {
 }
 
 
-def _validate(body: JsonDict):
+def _validate(body: JsonDict) -> None:
     """Validates the schema using jsonschema, and by checking whether the `key_ops` list
     includes at least `encrypt` and `decrypt`.
 
@@ -70,7 +70,7 @@ def _validate(body: JsonDict):
         raise ValueError('key_ops must contain at least "encrypt" and "decrypt"')
 
 
-def validate_encrypted_file_metadata(body: JsonDict):
+def validate_encrypted_file_metadata(body: JsonDict) -> None:
     """Validates the schema of the given dictionary, and turns any validation error
     raised into a Matrix client error.
 

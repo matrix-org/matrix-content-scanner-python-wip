@@ -16,5 +16,5 @@ import attr
 
 @attr.s(auto_attribs=True, frozen=True)
 class MediaDescription:
-    content_type: bytes
+    content_type: str
     content: bytes

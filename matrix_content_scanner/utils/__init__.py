@@ -1,4 +1,4 @@
-#  Copyright 2021 The Matrix.org Foundation C.I.C.
+#  Copyright 2022 The Matrix.org Foundation C.I.C.
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -11,10 +11,3 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-
-
-class ErrCodes:
-    INVALID_PARAM = "M_INVALID_PARAM"
-    UNKNOWN = "M_UNKNOWN"
-    FILE_NOT_FOUND = "MCS_FILE_NOT_FOUND"
-    NOT_FOUND = "M_NOT_FOUND"

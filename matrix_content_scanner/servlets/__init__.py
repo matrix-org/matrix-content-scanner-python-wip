@@ -11,17 +11,18 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-import functools
-import logging
+import abc
 import json
-from typing import Any, Dict, Optional, Tuple
+import logging
+from typing import Any, Awaitable, Callable, Dict, Tuple
 
-from aiohttp import abc
 from twisted.internet import defer
 from twisted.python import failure
 from twisted.web.http import Request
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
+
+from matrix_content_scanner.utils.constants import ErrCodes
 
 logger = logging.getLogger(__name__)
 
@@ -33,14 +34,15 @@ class MatrixRestError(Exception):
     Handled by the jsonwrap wrapper. Any servlets that don't use this
     wrapper should catch this exception themselves.
     """
-    def __init__(self, httpStatus, errcode, error):
+
+    def __init__(self, httpStatus: int, errcode: str, error: str) -> None:
         super(Exception, self).__init__(error)
         self.httpStatus = httpStatus
         self.errcode = errcode
         self.error = error
 
 
-class _AsyncResource(Resource):
+class _AsyncResource(Resource, metaclass=abc.ABCMeta):
     def render(self, request: Request) -> int:
         """This gets called by twisted every time someone sends us a request."""
         defer.ensureDeferred(self._async_render_wrapper(request))
@@ -63,7 +65,7 @@ class _AsyncResource(Resource):
             f = failure.Failure()
             self._send_error_response(f, request)
 
-    async def _async_render(self, request: Request) -> Optional[Tuple[int, Any]]:
+    async def _async_render(self, request: Request) -> Tuple[int, Any]:
         """Delegates to `_async_render_<METHOD>` methods, or returns a 400 if
         no appropriate method exists. Can be overridden in sub classes for
         different routing.
@@ -73,11 +75,11 @@ class _AsyncResource(Resource):
         if request_method == "HEAD":
             request_method = "GET"
 
-        method_handler = getattr(self, "on_%s" % (request_method,), None)
-        if method_handler:
-            return await method_handler(request)
+        method_handler: Callable[[Request], Awaitable[Tuple[int, Any]]] = getattr(self, "on_%s" % (request_method,), None)  # type: ignore[assignment]
+        if not method_handler:
+            raise MatrixRestError(404, ErrCodes.NOT_FOUND, "Route not found")
 
-        raise MatrixRestError(404, "M_NOT_FOUND", "Route not found")
+        return await method_handler(request)
 
     @abc.abstractmethod
     def _send_response(
@@ -102,7 +104,7 @@ class JsonResource(_AsyncResource):
     formatting responses and errors as JSON.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
     def _send_response(
@@ -126,29 +128,25 @@ class JsonResource(_AsyncResource):
         request.setHeader("Content-Type", "application/json")
 
         if f.check(MatrixRestError) is not None:
-            request.setResponseCode(f.value.httpStatus)
-            res = dict_to_json_bytes({'errcode': f.value.errcode, 'error': f.value.error})
+            error: MatrixRestError = f.value  # type: ignore[assignment]
+            request.setResponseCode(error.httpStatus)
+            res = dict_to_json_bytes({"errcode": error.errcode, "error": error.error})
             request.write(res)
         else:
             logger.error("Request processing failed: %r, %s", failure, f.getTraceback())
             request.setResponseCode(500)
-            res = dict_to_json_bytes({'errcode': 'M_UNKNOWN', 'error': 'Internal Server Error'})
+            res = dict_to_json_bytes(
+                {"errcode": "M_UNKNOWN", "error": "Internal Server Error"}
+            )
             request.write(res)
 
         request.finish()
 
 
-def dict_to_json_bytes(content):
-    """
-    Converts a dict into JSON and encodes it to bytes.
-
-    :param content:
-    :type content: dict[any, any]
-
-    :return: The JSON bytes.
-    :rtype: bytes
-    """
+def dict_to_json_bytes(content: JsonDict) -> bytes:
+    """Converts a dict into JSON and encodes it to bytes."""
     return json.dumps(content).encode("UTF-8")
+
 
 class BytesResource(_AsyncResource):
     """A resource that will call `self._async_on_<METHOD>` on new requests,
@@ -179,11 +177,12 @@ class BytesResource(_AsyncResource):
         request.setHeader("Content-Type", "application/json")
 
         if f.check(MatrixRestError) is not None:
-            request.setResponseCode(f.value.httpStatus)
-            request.write(f.value.error.encode("utf-8"))
+            error: MatrixRestError = f.value  # type: ignore[assignment]
+            request.setResponseCode(error.httpStatus)
+            request.write(error.error.encode("utf-8"))
         else:
             logger.exception(f.value)
             request.setResponseCode(500)
-            request.write(b'Internal Server Error')
+            request.write(b"Internal Server Error")
 
         request.finish()

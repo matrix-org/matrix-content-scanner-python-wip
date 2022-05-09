@@ -96,9 +96,7 @@ class Scanner:
             self._exit_codes_to_ignore is None
             or exit_code not in self._exit_codes_to_ignore
         ):
-            logger.info(
-                "Caching result %s", result
-            )
+            logger.info("Caching result %s", result)
             self._result_cache[cache_key] = CacheEntry(
                 result=result,
                 media=media,
