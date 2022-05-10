@@ -17,9 +17,11 @@ from typing import TYPE_CHECKING, Tuple
 from twisted.web.http import Request
 
 from matrix_content_scanner.servlets import JsonDict, JsonResource
+from matrix_content_scanner.utils.constants import ErrCodes
 from matrix_content_scanner.utils.encrypted_file_metadata import (
     validate_encrypted_file_metadata,
 )
+from matrix_content_scanner.utils.errors import FileDirtyError, ContentScannerRestError
 
 if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner
@@ -35,8 +37,15 @@ class ScanServlet(JsonResource):
     async def on_GET(self, request: Request) -> Tuple[int, JsonDict]:
         # mypy doesn't recognise request.postpath but it does exist and is documented.
         media_path: bytes = b"/".join(request.postpath)  # type: ignore[attr-defined]
-        result, _ = await self._scanner.scan_file(media_path.decode("ascii"), None)
-        return 200, {"clean": result}
+
+        try:
+            await self._scanner.scan_file(media_path.decode("ascii"), None)
+        except FileDirtyError:
+            clean = False
+        else:
+            clean = True
+
+        return 200, {"clean": clean}
 
 
 class ScanEncryptedServlet(JsonResource):
@@ -47,12 +56,22 @@ class ScanEncryptedServlet(JsonResource):
     async def on_POST(self, request: Request) -> Tuple[int, JsonDict]:
         assert request.content is not None
         body = request.content.read().decode("ascii")
-        metadata = json.loads(body)
+
+        try:
+            metadata = json.loads(body)
+        except json.decoder.JSONDecodeError as e:
+            raise ContentScannerRestError(400, ErrCodes.MALFORMED_JSON, str(e))
 
         validate_encrypted_file_metadata(metadata)
 
         url = metadata["file"]["url"]
         media_path = url[len("mxc://") :]
 
-        result, _ = await self._scanner.scan_file(media_path, metadata)
-        return 200, {"clean": result}
+        try:
+            await self._scanner.scan_file(media_path.decode("ascii"), metadata)
+        except FileDirtyError:
+            clean = False
+        else:
+            clean = True
+
+        return 200, {"clean": clean}

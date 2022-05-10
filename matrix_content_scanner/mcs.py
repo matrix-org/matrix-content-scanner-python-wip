@@ -87,7 +87,7 @@ if __name__ == "__main__":
     cfg = MatrixContentScannerConfig(
         {
             "scan": {
-                "script": "true",
+                "script": "false",
                 "temp_directory": "temp",
             },
             "web": {

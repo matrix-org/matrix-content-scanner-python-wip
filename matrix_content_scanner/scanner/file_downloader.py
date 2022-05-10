@@ -12,13 +12,13 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from twisted.web.client import Agent, readBody
 from twisted.web.iweb import IResponse
 
-from matrix_content_scanner.servlets import MatrixRestError
 from matrix_content_scanner.utils.constants import ErrCodes
+from matrix_content_scanner.utils.errors import ContentScannerRestError
 from matrix_content_scanner.utils.types import MediaDescription
 
 if TYPE_CHECKING:
@@ -37,27 +37,34 @@ class _MediaNotFoundException(Exception):
 
 class FileDownloader:
     MEDIA_DOWNLOAD_PREFIX = "_matrix/media/%s/download"
+    MEDIA_THUMBNAIL_PREFIX = "_matrix/media/%s/thumbnail"
 
     def __init__(self, mcs: "MatrixContentScanner"):
         self._base_url = mcs.config.scan.base_homeserver_url
         self._agent = Agent(mcs.reactor)
         self._store_directory = mcs.config.scan.temp_directory
 
-    async def download_file(self, media_path: str) -> MediaDescription:
+    async def download_file(
+        self,
+        media_path: str,
+        thumbnail_params: Optional[Dict[bytes, List[bytes]]] = None,
+    ) -> MediaDescription:
         """Retrieve the file with the given `server_name/media_id` path, and stores it on
         disk.
 
         Args:
             media_path: The path identifying the media to retrieve.
+            thumbnail_params: If present, then we want to request and scan a thumbnail
+                generated with the provided parameters instead of the full media.
 
         Returns:
             A description of the file (including its full content).
 
         Raises:
-            MatrixRestError: The file was not found or could not be downloaded due to an
+            ContentScannerRestError: The file was not found or could not be downloaded due to an
                 error on the remote homeserver's side.
         """
-        url = self._build_https_url(media_path)
+        url = self._build_https_url(media_path, thumbnail_params=thumbnail_params)
 
         # Attempt to retrieve the file at the generated URL.
         try:
@@ -68,17 +75,28 @@ class FileDownloader:
             # again with an r0 endpoint.
             logger.info("File not found, trying legacy r0 path")
 
-            url = self._build_https_url(media_path, endpoint_version="r0")
+            url = self._build_https_url(
+                media_path, endpoint_version="r0", thumbnail_params=thumbnail_params
+            )
 
             try:
                 file = await self._get_file_content(url)
             except _MediaNotFoundException:
                 # If that still failed, raise an error.
-                raise MatrixRestError(404, ErrCodes.FILE_NOT_FOUND, "File not found")
+                raise ContentScannerRestError(
+                    http_status=502,
+                    reason=ErrCodes.REQUEST_FAILED,
+                    info="File not found",
+                )
 
         return file
 
-    def _build_https_url(self, media_path: str, endpoint_version: str = "v3") -> str:
+    def _build_https_url(
+        self,
+        media_path: str,
+        endpoint_version: str = "v3",
+        thumbnail_params: Optional[Dict[bytes, List[bytes]]] = None,
+    ) -> str:
         """Turn a `server_name/media_id` path into an https:// one we can use to fetch
         the media.
 
@@ -89,6 +107,8 @@ class FileDownloader:
             media_path: The media path to translate.
             endpoint_version: The version of the download endpoint to use. As of Matrix
                 v1.1, this is either "v3" or "r0".
+            thumbnail_params: If present, then we want to request and scan a thumbnail
+                generated with the provided parameters instead of the full media.
 
         Returns:
             An https URL to use. If `base_homeserver_url` is set in the config, this
@@ -103,9 +123,24 @@ class FileDownloader:
         if self._base_url is not None:
             base_url = self._base_url
 
-        path_prefix = self.MEDIA_DOWNLOAD_PREFIX % endpoint_version
+        prefix = self.MEDIA_DOWNLOAD_PREFIX
+        query = None
+        if thumbnail_params is not None:
+            prefix = self.MEDIA_THUMBNAIL_PREFIX
 
-        return "%s/%s/%s/%s" % (base_url, path_prefix, server_name, media_id)
+            query = b""
+            for key, items in thumbnail_params.items():
+                for item in items:
+                    query += b"%s=%s&" % (key, item)
+            query = query[:-1]
+
+        path_prefix = prefix % endpoint_version
+
+        url = "%s/%s/%s/%s" % (base_url, path_prefix, server_name, media_id)
+        if query is not None:
+            url += "?%s" % query.decode("utf-8")
+
+        return url
 
     async def _get_file_content(self, url: str) -> MediaDescription:
         """Retrieve the content of the file at a given URL.
@@ -119,7 +154,7 @@ class FileDownloader:
         Raises:
             _MediaNotFoundException: the server returned a non-200 status that's not a
                 5xx error.
-            MatrixRestError: the server returned a 5xx status.
+            ContentScannerRestError: the server returned a 5xx status.
         """
         logger.info("Fetching file at URL: %s", url)
 
@@ -127,24 +162,16 @@ class FileDownloader:
 
         logger.info("Remote server responded with %d", resp.code)
 
-        # If the response isn't a 200 OK but isn't a 5xx, consider that the media
-        # couldn't be found.
-        if 200 < resp.code < 500:
+        # If the response isn't a 200 OK, consider that the media couldn't be found.
+        if 200 < resp.code:
             raise _MediaNotFoundException
-
-        if resp.code >= 500:
-            raise MatrixRestError(
-                502,
-                ErrCodes.UNKNOWN,
-                "The remote server experienced an unknown error",
-            )
 
         content_type_headers = resp.headers.getRawHeaders("content-type")
 
         if content_type_headers is None or len(content_type_headers) != 1:
-            raise MatrixRestError(
+            raise ContentScannerRestError(
                 502,
-                ErrCodes.UNKNOWN,
+                ErrCodes.REQUEST_FAILED,
                 "The remote server responded with an invalid amount of Content-Type headers",
             )
 

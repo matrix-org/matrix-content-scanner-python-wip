@@ -16,12 +16,15 @@ import json
 import logging
 import os.path
 import subprocess
-from typing import TYPE_CHECKING, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 import attr
 from mautrix.crypto.attachments import decrypt_attachment
+from mautrix.errors import DecryptionError
 
 from matrix_content_scanner.servlets import JsonDict
+from matrix_content_scanner.utils.constants import ErrCodes
+from matrix_content_scanner.utils.errors import FileDirtyError, ContentScannerRestError
 from matrix_content_scanner.utils.types import MediaDescription
 
 if TYPE_CHECKING:
@@ -49,7 +52,8 @@ class Scanner:
         self,
         media_path: str,
         metadata: Optional[JsonDict],
-    ) -> Tuple[bool, MediaDescription]:
+        thumbnail_params: Optional[Dict[bytes, List[bytes]]] = None,
+    ) -> MediaDescription:
         """Download and scan the given media.
 
         Unless the scan fails with one of the codes listed in `do_not_cache_exit_codes`,
@@ -62,22 +66,35 @@ class Scanner:
             media_path: The `server_name/media_id` path for the media.
             metadata: The metadata attached to the file (e.g. decryption key), or None if
                 the file isn't encrypted.
+            thumbnail_params: If present, then we want to request and scan a thumbnail
+                generated with the provided parameters instead of the full media.
 
         Returns:
-            A boolean indicating whether the scan succeeded, i.e. whether the script
-            returned with a 0 exit code, alongside the downloaded body of the file.
+            A description of the media.
+
+        Raises:
+            ContentScannerRestError if the file could not be downloaded.
+            FileDirtyError if the result of the scan said that the file is dirty.
         """
         # Compute the cache key for the media.
+        # TODO: calculate the cache key with thumbnail params
         cache_key = self._get_cache_key_for_file(media_path, metadata)
 
         # Return the cached result if there's one.
         if cache_key in self._result_cache:
             cache_entry = self._result_cache[cache_key]
             logger.info("Returning cached result %s", cache_entry.result)
-            return cache_entry.result, cache_entry.media
+
+            if cache_entry.result is False:
+                raise FileDirtyError()
+
+            return cache_entry.media
 
         # Download the file, and decrypt it if necessary.
-        media = await self._file_downloader.download_file(media_path)
+        media = await self._file_downloader.download_file(
+            media_path=media_path,
+            thumbnail_params=thumbnail_params,
+        )
 
         if metadata is not None:
             # If the file is encrypted, we need to decrypt it before we can scan it, but
@@ -112,7 +129,11 @@ class Scanner:
         removal_command_parts.append(file_path)
         subprocess.run(removal_command_parts)
 
-        return result, media
+        # Raise an error if the result isn't clean.
+        if result is False:
+            raise FileDirtyError()
+
+        return media
 
     def _get_cache_key_for_file(
         self,
@@ -152,7 +173,15 @@ class Scanner:
         hash = metadata["file"]["hashes"]["sha256"]
         iv = metadata["file"]["iv"]
 
-        return decrypt_attachment(body, key, hash, iv)
+        try:
+            return decrypt_attachment(body, key, hash, iv)
+        except DecryptionError as e:
+            raise ContentScannerRestError(
+                http_status=400,
+                reason=ErrCodes.FAILED_TO_DECRYPT,
+                info=e.message,
+            )
+
 
     def _write_file_to_disk(self, media_path: str, body: bytes) -> str:
         """Writes the given content to disk. The final file name will be a concatenation
@@ -188,7 +217,7 @@ class Scanner:
             The exit code the script returned.
         """
         try:
-            subprocess.run([self._script, file_name])
+            subprocess.run([self._script, file_name], check=True)
             logger.info("Scan succeeded")
             return 0
         except subprocess.CalledProcessError as e:

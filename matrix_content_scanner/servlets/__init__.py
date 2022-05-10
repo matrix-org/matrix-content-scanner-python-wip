@@ -17,69 +17,56 @@ import logging
 from typing import Any, Awaitable, Callable, Dict, Tuple
 
 from twisted.internet import defer
-from twisted.python import failure
 from twisted.web.http import Request
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
 from matrix_content_scanner.utils.constants import ErrCodes
+from matrix_content_scanner.utils.errors import ContentScannerRestError
 
 logger = logging.getLogger(__name__)
 
 JsonDict = Dict[str, Any]
 
 
-class MatrixRestError(Exception):
-    """
-    Handled by the jsonwrap wrapper. Any servlets that don't use this
-    wrapper should catch this exception themselves.
-    """
-
-    def __init__(self, httpStatus: int, errcode: str, error: str) -> None:
-        super(Exception, self).__init__(error)
-        self.httpStatus = httpStatus
-        self.errcode = errcode
-        self.error = error
-
-
 class _AsyncResource(Resource, metaclass=abc.ABCMeta):
     def render(self, request: Request) -> int:
         """This gets called by twisted every time someone sends us a request."""
-        defer.ensureDeferred(self._async_render_wrapper(request))
+        defer.ensureDeferred(self._async_render(request))
         return NOT_DONE_YET
 
-    async def _async_render_wrapper(self, request: Request) -> None:
-        """This is a wrapper that delegates to `_async_render` and handles
-        exceptions and return values.
-        """
+    async def _async_render(self, request: Request) -> None:
+        """Processes the incoming request asynchronously and handles errors."""
         try:
-            callback_return = await self._async_render(request)
+            # Treat HEAD requests as GET requests.
+            request_method = request.method.decode("ascii")
+            if request_method == "HEAD":
+                request_method = "GET"
 
-            if callback_return is not None:
-                code, response = callback_return
-                self._send_response(request, code, response)
-        except Exception:
-            # failure.Failure() fishes the original Failure out
-            # of our stack, and thus gives us a sensible stack
-            # trace.
-            f = failure.Failure()
-            self._send_error_response(f, request)
+            method_handler: Callable[[Request], Awaitable[Tuple[int, Any]]] = getattr(
+                self, "on_%s" % (request_method,), None
+            )  # type: ignore[assignment]
+            if not method_handler:
+                raise ContentScannerRestError(
+                    404, ErrCodes.NOT_FOUND, "Route not found"
+                )
 
-    async def _async_render(self, request: Request) -> Tuple[int, Any]:
-        """Delegates to `_async_render_<METHOD>` methods, or returns a 400 if
-        no appropriate method exists. Can be overridden in sub classes for
-        different routing.
-        """
-        # Treat HEAD requests as GET requests.
-        request_method = request.method.decode("ascii")
-        if request_method == "HEAD":
-            request_method = "GET"
+            code, response = await method_handler(request)
 
-        method_handler: Callable[[Request], Awaitable[Tuple[int, Any]]] = getattr(self, "on_%s" % (request_method,), None)  # type: ignore[assignment]
-        if not method_handler:
-            raise MatrixRestError(404, ErrCodes.NOT_FOUND, "Route not found")
-
-        return await method_handler(request)
+            self._send_response(request, code, response)
+        except ContentScannerRestError as e:
+            request.setResponseCode(e.http_status)
+            res = _dict_to_json_bytes({"reason": e.reason, "info": e.info})
+            request.write(res)
+            request.finish()
+        except Exception as e:
+            logger.exception(e)
+            request.setResponseCode(500)
+            res = _dict_to_json_bytes(
+                {"reason": "M_UNKNOWN", "info": "Internal Server Error"}
+            )
+            request.write(res)
+            request.finish()
 
     @abc.abstractmethod
     def _send_response(
@@ -87,14 +74,6 @@ class _AsyncResource(Resource, metaclass=abc.ABCMeta):
         request: Request,
         code: int,
         response_object: Any,
-    ) -> None:
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def _send_error_response(
-        self,
-        f: failure.Failure,
-        request: Request,
     ) -> None:
         raise NotImplementedError()
 
@@ -116,34 +95,11 @@ class JsonResource(_AsyncResource):
         """Implements _AsyncResource._send_response"""
         request.setResponseCode(code)
         request.setHeader("Content-Type", "application/json")
-        request.write(dict_to_json_bytes(response_object))
-        request.finish()
-
-    def _send_error_response(
-        self,
-        f: failure.Failure,
-        request: Request,
-    ) -> None:
-        """Implements _AsyncResource._send_error_response"""
-        request.setHeader("Content-Type", "application/json")
-
-        if f.check(MatrixRestError) is not None:
-            error: MatrixRestError = f.value  # type: ignore[assignment]
-            request.setResponseCode(error.httpStatus)
-            res = dict_to_json_bytes({"errcode": error.errcode, "error": error.error})
-            request.write(res)
-        else:
-            logger.error("Request processing failed: %r, %s", failure, f.getTraceback())
-            request.setResponseCode(500)
-            res = dict_to_json_bytes(
-                {"errcode": "M_UNKNOWN", "error": "Internal Server Error"}
-            )
-            request.write(res)
-
+        request.write(_dict_to_json_bytes(response_object))
         request.finish()
 
 
-def dict_to_json_bytes(content: JsonDict) -> bytes:
+def _dict_to_json_bytes(content: JsonDict) -> bytes:
     """Converts a dict into JSON and encodes it to bytes."""
     return json.dumps(content).encode("UTF-8")
 
@@ -166,23 +122,4 @@ class BytesResource(_AsyncResource):
         assert isinstance(response_object, bytes)
         request.setResponseCode(code)
         request.write(response_object)
-        request.finish()
-
-    def _send_error_response(
-        self,
-        f: failure.Failure,
-        request: Request,
-    ) -> None:
-        """Implements _AsyncResource._send_error_response"""
-        request.setHeader("Content-Type", "application/json")
-
-        if f.check(MatrixRestError) is not None:
-            error: MatrixRestError = f.value  # type: ignore[assignment]
-            request.setResponseCode(error.httpStatus)
-            request.write(error.error.encode("utf-8"))
-        else:
-            logger.exception(f.value)
-            request.setResponseCode(500)
-            request.write(b"Internal Server Error")
-
         request.finish()

@@ -22,6 +22,7 @@ from matrix_content_scanner.servlets.download import (
     DownloadServlet,
 )
 from matrix_content_scanner.servlets.scan import ScanEncryptedServlet, ScanServlet
+from matrix_content_scanner.servlets.thumbnail import ThumbnailServlet
 
 if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner
@@ -52,6 +53,7 @@ class HTTPServer:
         unstable.putChild(b"scan_encrypted", ScanEncryptedServlet(self._mcs))
         unstable.putChild(b"download", DownloadServlet(self._mcs))
         unstable.putChild(b"download_encrypted", DownloadEncryptedServlet(self._mcs))
+        unstable.putChild(b"thumbnail", ThumbnailServlet(self._mcs))
 
         return root
 

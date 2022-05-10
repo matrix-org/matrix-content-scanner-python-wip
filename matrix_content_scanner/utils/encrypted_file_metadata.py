@@ -13,8 +13,9 @@
 #  limitations under the License.
 from jsonschema import ValidationError, validate
 
-from matrix_content_scanner.servlets import JsonDict, MatrixRestError
+from matrix_content_scanner.servlets import JsonDict
 from matrix_content_scanner.utils.constants import ErrCodes
+from matrix_content_scanner.utils.errors import ContentScannerRestError
 
 # This is a subset of the content of a m.room.message event that includes a file, with
 # only the info that we need to locate and decrypt the file.
@@ -78,11 +79,11 @@ def validate_encrypted_file_metadata(body: JsonDict) -> None:
         body: The body to validate.
 
     Raises:
-        MatrixRestError if the validation failed.
+        ContentScannerRestError if the validation failed.
     """
     try:
         _validate(body)
     except ValidationError as e:
-        raise MatrixRestError(400, ErrCodes.INVALID_PARAM, e.message)
+        raise ContentScannerRestError(400, ErrCodes.MALFORMED_JSON, e.message)
     except ValueError as e:
-        raise MatrixRestError(400, ErrCodes.INVALID_PARAM, str(e))
+        raise ContentScannerRestError(400, ErrCodes.MALFORMED_JSON, str(e))
