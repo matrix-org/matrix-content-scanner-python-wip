@@ -24,7 +24,7 @@ from mautrix.errors import DecryptionError
 
 from matrix_content_scanner.servlets import JsonDict
 from matrix_content_scanner.utils.constants import ErrCodes
-from matrix_content_scanner.utils.errors import FileDirtyError, ContentScannerRestError
+from matrix_content_scanner.utils.errors import ContentScannerRestError, FileDirtyError
 from matrix_content_scanner.utils.types import MediaDescription
 
 if TYPE_CHECKING:
@@ -181,7 +181,6 @@ class Scanner:
                 reason=ErrCodes.FAILED_TO_DECRYPT,
                 info=e.message,
             )
-
 
     def _write_file_to_disk(self, media_path: str, body: bytes) -> str:
         """Writes the given content to disk. The final file name will be a concatenation

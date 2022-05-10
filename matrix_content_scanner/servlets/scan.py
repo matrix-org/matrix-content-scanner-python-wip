@@ -21,7 +21,7 @@ from matrix_content_scanner.utils.constants import ErrCodes
 from matrix_content_scanner.utils.encrypted_file_metadata import (
     validate_encrypted_file_metadata,
 )
-from matrix_content_scanner.utils.errors import FileDirtyError, ContentScannerRestError
+from matrix_content_scanner.utils.errors import ContentScannerRestError, FileDirtyError
 
 if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner
