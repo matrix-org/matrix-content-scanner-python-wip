@@ -11,6 +11,7 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
+import json
 import logging
 from typing import TYPE_CHECKING, Dict, List, Optional
 
@@ -162,9 +163,25 @@ class FileDownloader:
 
         logger.info("Remote server responded with %d", resp.code)
 
-        # If the response isn't a 200 OK, consider that the media couldn't be found.
+        # If the response isn't a 200 OK, raise.
         if 200 < resp.code:
-            raise _MediaNotFoundException
+            body = await readBody(resp)
+            logger.info("Response body: %s", body)
+            # If the response is a 404 or an "unrecognised request" à la Synapse,
+            # consider that we could not find the media.
+            if resp.code == 400 or resp.code == 404:
+                try:
+                    err = json.loads(body)
+                    if err["errcode"] == "M_UNRECOGNIZED" or resp.code == 404:
+                        raise _MediaNotFoundException
+                except (json.decoder.JSONDecodeError, KeyError):
+                    pass
+
+            raise ContentScannerRestError(
+                502,
+                ErrCodes.REQUEST_FAILED,
+                "The remote server responded with an error: %s" % body,
+            )
 
         content_type_headers = resp.headers.getRawHeaders("content-type")
 
