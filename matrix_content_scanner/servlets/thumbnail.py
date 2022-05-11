@@ -11,7 +11,7 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-from typing import TYPE_CHECKING, Tuple, Union
+from typing import TYPE_CHECKING, Tuple, Union, Dict, List
 
 from twisted.web.http import Request
 
@@ -31,10 +31,20 @@ class ThumbnailServlet(BytesResource):
     async def on_GET(self, request: Request) -> Tuple[int, Union[bytes, JsonDict]]:
         # mypy doesn't recognise request.postpath but it does exist and is documented.
         media_path: bytes = b"/".join(request.postpath)  # type: ignore[attr-defined]
+
+        # request.args stores all keys and values as bytes. However, we want them to be
+        # string going forward, so we convert them now.
+        thumbnail_params: Dict[str, List[str]] = {}
+        for key, values in request.args.items():
+            str_values: List[str] = []
+            for value in values:
+                str_values.append(value.decode("utf-8"))
+            thumbnail_params[key.decode("utf-8")] = str_values
+
         media = await self._scanner.scan_file(
             media_path=media_path.decode("ascii"),
             metadata=None,
-            thumbnail_params=request.args,
+            thumbnail_params=thumbnail_params,
         )
         request.setHeader("Content-Type", media.content_type)
         request.setHeader("Content-Length", str(len(media.content)))

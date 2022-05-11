@@ -52,7 +52,7 @@ class Scanner:
         self,
         media_path: str,
         metadata: Optional[JsonDict],
-        thumbnail_params: Optional[Dict[bytes, List[bytes]]] = None,
+        thumbnail_params: Optional[Dict[str, List[str]]] = None,
     ) -> MediaDescription:
         """Download and scan the given media.
 
@@ -77,8 +77,7 @@ class Scanner:
             FileDirtyError if the result of the scan said that the file is dirty.
         """
         # Compute the cache key for the media.
-        # TODO: calculate the cache key with thumbnail params
-        cache_key = self._get_cache_key_for_file(media_path, metadata)
+        cache_key = self._get_cache_key_for_file(media_path, metadata, thumbnail_params)
 
         # Return the cached result if there's one.
         if cache_key in self._result_cache:
@@ -139,20 +138,28 @@ class Scanner:
         self,
         media_path: str,
         metadata: Optional[JsonDict],
+        thumbnail_params: Optional[Dict[str, List[str]]],
     ) -> str:
         """Generates the key to use to store the result for the given media in the result
         cache.
 
         The key is computed using the media's `server_name/media_id` path, but also the
-        metadata dict (stringified), in case e.g. the decryption key changes.
+        metadata dict (stringified), in case e.g. the decryption key changes, as well as
+        the parameters used to generate the thumbnail if any (stringified), to
+        differentiate thumbnails from full-sized media.
         The resulting key is a sha256 hash of the concatenation of these two values.
 
         Args:
             media_path: The `server_name/media_id` path of the file to scan.
             metadata: The file's metadata (or None if the file isn't encrypted).
+            thumbnail_params: The parameters to generate thumbnail with. If no parameter
+                is passed, this will be an empty dict. If the media being requested is not
+                a thumbnail, this will be None.
         """
         raw_metadata = json.dumps(metadata)
-        base_string = media_path + raw_metadata
+        raw_params = json.dumps(thumbnail_params)
+        base_string = media_path + raw_metadata + raw_params
+
         return hashlib.sha256(base_string.encode("ascii")).hexdigest()
 
     def _decrypt_file(self, body: bytes, metadata: JsonDict) -> bytes:

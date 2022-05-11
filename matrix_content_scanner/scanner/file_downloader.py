@@ -47,7 +47,7 @@ class FileDownloader:
     async def download_file(
         self,
         media_path: str,
-        thumbnail_params: Optional[Dict[bytes, List[bytes]]] = None,
+        thumbnail_params: Optional[Dict[str, List[str]]] = None,
     ) -> MediaDescription:
         """Retrieve the file with the given `server_name/media_id` path, and stores it on
         disk.
@@ -95,7 +95,7 @@ class FileDownloader:
         self,
         media_path: str,
         endpoint_version: str = "v3",
-        thumbnail_params: Optional[Dict[bytes, List[bytes]]] = None,
+        thumbnail_params: Optional[Dict[str, List[str]]] = None,
     ) -> str:
         """Turn a `server_name/media_id` path into an https:// one we can use to fetch
         the media.
@@ -128,17 +128,17 @@ class FileDownloader:
         if thumbnail_params is not None:
             prefix = self.MEDIA_THUMBNAIL_PREFIX
 
-            query = b""
+            query = ""
             for key, items in thumbnail_params.items():
                 for item in items:
-                    query += b"%s=%s&" % (key, item)
+                    query += "%s=%s&" % (key, item)
             query = query[:-1]
 
         path_prefix = prefix % endpoint_version
 
         url = "%s/%s/%s/%s" % (base_url, path_prefix, server_name, media_id)
         if query is not None:
-            url += "?%s" % query.decode("utf-8")
+            url += "?%s" % query
 
         return url
 
