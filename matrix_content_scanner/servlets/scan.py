@@ -39,12 +39,12 @@ class ScanServlet(JsonResource):
 
         try:
             await self._scanner.scan_file(media_path.decode("ascii"), None)
-        except FileDirtyError:
-            clean = False
+        except FileDirtyError as e:
+            res = {"clean": False, "info": e.info}
         else:
-            clean = True
+            res = {"clean": True}
 
-        return 200, {"clean": clean}
+        return 200, res
 
 
 class ScanEncryptedServlet(JsonResource):

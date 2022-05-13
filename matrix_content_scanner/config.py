@@ -30,6 +30,7 @@ class ScanConfig:
     do_not_cache_exit_codes: Optional[List[int]] = None
     direct_download: bool = False
     removal_command: str = "rm"
+    allowed_mimetypes: Optional[List[str]] = None
 
 
 @attr.s(auto_attribs=True, frozen=True)

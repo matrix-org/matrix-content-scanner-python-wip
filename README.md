@@ -6,6 +6,8 @@ A web service for scanning media hosted by a Matrix media repository
 
 TODO
 
+(requires libolm and libmagic)
+
 ## Development
 
 In a virtual environment with pip ≥ 21.1, run

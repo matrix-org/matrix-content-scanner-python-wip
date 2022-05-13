@@ -94,6 +94,7 @@ if __name__ == "__main__":
             "scan": {
                 "script": "true",
                 "temp_directory": "temp",
+                "allowed_mimetypes": ["image/jpeg"],
             },
             "web": {
                 "host": "127.0.0.1",

@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 import attr
 from mautrix.crypto.attachments import decrypt_attachment
 from mautrix.errors import DecryptionError
+from mautrix.util import magic
 
 from matrix_content_scanner.utils.constants import ErrCodes
 from matrix_content_scanner.utils.errors import ContentScannerRestError, FileDirtyError
@@ -46,6 +47,7 @@ class Scanner:
         self._exit_codes_to_ignore = mcs.config.scan.do_not_cache_exit_codes
         self._removal_command = mcs.config.scan.removal_command
         self._store_directory = mcs.config.scan.temp_directory
+        self._allowed_mimetypes = mcs.config.scan.allowed_mimetypes
 
     async def scan_file(
         self,
@@ -98,10 +100,12 @@ class Scanner:
             # If the file is encrypted, we need to decrypt it before we can scan it, but
             # we also need to keep the encrypted body in memory in case we want to return
             # it to the client.
-            decrypted_file_body = self._decrypt_file(media.content, metadata)
-            file_path = self._write_file_to_disk(media_path, decrypted_file_body)
-        else:
-            file_path = self._write_file_to_disk(media_path, media.content)
+            media.content = self._decrypt_file(media.content, metadata)
+            media.encrypted = True
+
+        self._check_mimetype(media)
+
+        file_path = self._write_file_to_disk(media_path, media.content)
 
         exit_code = self._run_scan(file_path)
         result = exit_code == 0
@@ -228,3 +232,29 @@ class Scanner:
         except subprocess.CalledProcessError as e:
             logger.info("Scan failed with exit code %d: %s", e.returncode, e.stderr)
             return e.returncode
+
+    def _check_mimetype(self, media: MediaDescription) -> None:
+        mimetype = magic.mimetype(media.content)
+
+        logger.info("File is %s", mimetype)
+
+        if media.encrypted is False and mimetype != media.content_type:
+            # Error if the MIME type isn't matching the one that's expected, but only if
+            # the file is not encrypted (because otherwise we'll always have
+            # 'application/octet-stream' in the Content-Type header).
+            logger.error(
+                "Mismatching MIME type (%s) and Content-Type header (%s)",
+                mimetype,
+                media.content_type,
+            )
+            raise FileDirtyError("File type not supported")
+
+        if (
+            self._allowed_mimetypes is not None
+            and mimetype not in self._allowed_mimetypes
+        ):
+            logger.error(
+                "MIME type for file is forbidden: %s",
+                mimetype,
+            )
+            raise FileDirtyError("File type not supported")

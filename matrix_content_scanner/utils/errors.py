@@ -28,9 +28,9 @@ class ContentScannerRestError(Exception):
 
 
 class FileDirtyError(ContentScannerRestError):
-    def __init__(self) -> None:
+    def __init__(self, info: str = "***VIRUS DETECTED***") -> None:
         super(FileDirtyError, self).__init__(
             http_status=403,
             reason=ErrCodes.NOT_CLEAN,
-            info="***VIRUS DETECTED***",
+            info=info,
         )

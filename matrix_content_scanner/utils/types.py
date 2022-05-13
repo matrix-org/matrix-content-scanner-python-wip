@@ -16,10 +16,11 @@ from typing import Any, Dict
 import attr
 
 
-@attr.s(auto_attribs=True, frozen=True)
+@attr.s(auto_attribs=True)
 class MediaDescription:
     content_type: str
     content: bytes
+    encrypted: bool = False
 
 
 JsonDict = Dict[str, Any]

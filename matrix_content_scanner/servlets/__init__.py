@@ -58,18 +58,19 @@ class _AsyncResource(Resource, metaclass=abc.ABCMeta):
 
             self._send_response(request, code, response)
         except ContentScannerRestError as e:
-            request.setResponseCode(e.http_status)
-            res = _dict_to_json_bytes({"reason": e.reason, "info": e.info})
-            request.write(res)
-            request.finish()
+            self._send_error(request, e.http_status, {"reason": e.reason, "info": e.info})
         except Exception as e:
             logger.exception(e)
-            request.setResponseCode(500)
-            res = _dict_to_json_bytes(
-                {"reason": "M_UNKNOWN", "info": "Internal Server Error"}
+            self._send_error(
+                request, 500, {"reason": "M_UNKNOWN", "info": "Internal Server Error"}
             )
-            request.write(res)
-            request.finish()
+
+    def _send_error(self, request: Request, status: int, content: JsonDict) -> None:
+        request.setResponseCode(status)
+        request.setHeader("Content-Type", "application/json")
+        res = _dict_to_json_bytes(content)
+        request.write(res)
+        request.finish()
 
     @abc.abstractmethod
     def _send_response(
