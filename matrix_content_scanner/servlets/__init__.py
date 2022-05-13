@@ -14,19 +14,22 @@
 import abc
 import json
 import logging
-from typing import Any, Awaitable, Callable, Dict, Tuple
+from typing import Any, Awaitable, Callable, Optional, Tuple
 
 from twisted.internet import defer
 from twisted.web.http import Request
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
+from matrix_content_scanner.crypto import CryptoHandler
 from matrix_content_scanner.utils.constants import ErrCodes
+from matrix_content_scanner.utils.encrypted_file_metadata import (
+    validate_encrypted_file_metadata,
+)
 from matrix_content_scanner.utils.errors import ContentScannerRestError
+from matrix_content_scanner.utils.types import JsonDict
 
 logger = logging.getLogger(__name__)
-
-JsonDict = Dict[str, Any]
 
 
 class _AsyncResource(Resource, metaclass=abc.ABCMeta):
@@ -83,9 +86,6 @@ class JsonResource(_AsyncResource):
     formatting responses and errors as JSON.
     """
 
-    def __init__(self) -> None:
-        super().__init__()
-
     def _send_response(
         self,
         request: Request,
@@ -123,3 +123,40 @@ class BytesResource(_AsyncResource):
         request.setResponseCode(code)
         request.write(response_object)
         request.finish()
+
+
+def get_media_metadata_from_request(
+    request: Request, crypto_handler: CryptoHandler
+) -> JsonDict:
+    assert request.content is not None
+    body = request.content.read().decode("ascii")
+
+    try:
+        parsed_body = json.loads(body)
+    except json.decoder.JSONDecodeError as e:
+        raise ContentScannerRestError(400, ErrCodes.MALFORMED_JSON, str(e))
+
+    if not isinstance(parsed_body, dict):
+        raise ContentScannerRestError(
+            400,
+            ErrCodes.MALFORMED_JSON,
+            "Body must be a dictionary",
+        )
+
+    encrypted_body: Optional[JsonDict] = parsed_body.get("encrypted_body")
+    if encrypted_body is not None:
+        # If we have an encrypted payload in the body, decrypt it before doing
+        # anything else.
+        metadata = crypto_handler.decrypt_body(
+            ciphertext=encrypted_body["ciphertext"],
+            mac=encrypted_body["mac"],
+            ephemeral=encrypted_body["ephemeral"],
+        )
+    else:
+        # Otherwise, use the request's body since it will include the metadata in
+        # clear text.
+        metadata = parsed_body
+
+    validate_encrypted_file_metadata(metadata)
+
+    return metadata

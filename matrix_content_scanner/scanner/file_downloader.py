@@ -180,7 +180,7 @@ class FileDownloader:
             raise ContentScannerRestError(
                 502,
                 ErrCodes.REQUEST_FAILED,
-                "The remote server responded with an error: %s" % body,
+                "The remote server responded with an error",
             )
 
         content_type_headers = resp.headers.getRawHeaders("content-type")

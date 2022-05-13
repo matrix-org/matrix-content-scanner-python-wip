@@ -22,10 +22,9 @@ import attr
 from mautrix.crypto.attachments import decrypt_attachment
 from mautrix.errors import DecryptionError
 
-from matrix_content_scanner.servlets import JsonDict
 from matrix_content_scanner.utils.constants import ErrCodes
 from matrix_content_scanner.utils.errors import ContentScannerRestError, FileDirtyError
-from matrix_content_scanner.utils.types import MediaDescription
+from matrix_content_scanner.utils.types import JsonDict, MediaDescription
 
 if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner

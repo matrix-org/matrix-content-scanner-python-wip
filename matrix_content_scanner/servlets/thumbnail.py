@@ -11,11 +11,12 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-from typing import TYPE_CHECKING, Tuple, Union, Dict, List
+from typing import TYPE_CHECKING, Dict, List, Tuple, Union
 
 from twisted.web.http import Request
 
-from matrix_content_scanner.servlets import BytesResource, JsonDict
+from matrix_content_scanner.servlets import BytesResource
+from matrix_content_scanner.utils.types import JsonDict
 
 if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner

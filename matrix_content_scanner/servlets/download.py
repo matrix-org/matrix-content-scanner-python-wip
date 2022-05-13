@@ -11,17 +11,15 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-import json
 from typing import TYPE_CHECKING, Tuple, Union
 
 from twisted.web.http import Request
 
-from matrix_content_scanner.servlets import BytesResource, JsonDict
-from matrix_content_scanner.utils.constants import ErrCodes
-from matrix_content_scanner.utils.encrypted_file_metadata import (
-    validate_encrypted_file_metadata,
+from matrix_content_scanner.servlets import (
+    BytesResource,
+    get_media_metadata_from_request,
 )
-from matrix_content_scanner.utils.errors import ContentScannerRestError
+from matrix_content_scanner.utils.types import JsonDict
 
 if TYPE_CHECKING:
     from matrix_content_scanner.mcs import MatrixContentScanner
@@ -47,17 +45,10 @@ class DownloadEncryptedServlet(BytesResource):
     def __init__(self, content_scanner: "MatrixContentScanner"):
         super().__init__()
         self._scanner = content_scanner.scanner
+        self._crypto_handler = content_scanner.crypto_handler
 
     async def on_POST(self, request: Request) -> Tuple[int, Union[bytes, JsonDict]]:
-        assert request.content is not None
-        body = request.content.read().decode("ascii")
-
-        try:
-            metadata = json.loads(body)
-        except json.decoder.JSONDecodeError as e:
-            raise ContentScannerRestError(400, ErrCodes.MALFORMED_JSON, str(e))
-
-        validate_encrypted_file_metadata(metadata)
+        metadata = get_media_metadata_from_request(request, self._crypto_handler)
 
         url = metadata["file"]["url"]
         media_path = url[len("mxc://") :]

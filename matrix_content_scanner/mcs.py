@@ -25,6 +25,7 @@ from twisted.internet.interfaces import (
 from twisted.python import log
 
 from matrix_content_scanner.config import MatrixContentScannerConfig
+from matrix_content_scanner.crypto import CryptoHandler
 from matrix_content_scanner.httpserver import HTTPServer
 from matrix_content_scanner.scanner.file_downloader import FileDownloader
 from matrix_content_scanner.scanner.scanner import Scanner
@@ -59,6 +60,10 @@ class MatrixContentScanner:
     def scanner(self) -> Scanner:
         return Scanner(self)
 
+    @cached_property
+    def crypto_handler(self) -> CryptoHandler:
+        return CryptoHandler(self)
+
     def start(self) -> None:
         """Start the HTTP server and start the reactor."""
         setup_logging()
@@ -87,12 +92,16 @@ if __name__ == "__main__":
     cfg = MatrixContentScannerConfig(
         {
             "scan": {
-                "script": "false",
+                "script": "true",
                 "temp_directory": "temp",
             },
             "web": {
                 "host": "127.0.0.1",
                 "port": 8080,
+            },
+            "crypto": {
+                "pickle_path": "/home/babolivier/Documents/matrix/matrix-content-scanner-python/mcs_pickle",
+                "pickle_key": "foo",
             },
         }
     )

@@ -32,7 +32,14 @@ class ScanConfig:
     removal_command: str = "rm"
 
 
+@attr.s(auto_attribs=True, frozen=True)
+class CryptoConfig:
+    pickle_path: str
+    pickle_key: str
+
+
 class MatrixContentScannerConfig:
     def __init__(self, raw_config: Dict[str, Any]):
         self.web = WebConfig(**(raw_config.get("web") or {}))
         self.scan = ScanConfig(**(raw_config.get("scan") or {}))
+        self.crypto = CryptoConfig(**(raw_config.get("crypto") or {}))

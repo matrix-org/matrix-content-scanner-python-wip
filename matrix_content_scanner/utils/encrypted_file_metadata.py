@@ -13,9 +13,9 @@
 #  limitations under the License.
 from jsonschema import ValidationError, validate
 
-from matrix_content_scanner.servlets import JsonDict
 from matrix_content_scanner.utils.constants import ErrCodes
 from matrix_content_scanner.utils.errors import ContentScannerRestError
+from matrix_content_scanner.utils.types import JsonDict
 
 # This is a subset of the content of a m.room.message event that includes a file, with
 # only the info that we need to locate and decrypt the file.

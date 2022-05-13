@@ -21,6 +21,7 @@ from matrix_content_scanner.servlets.download import (
     DownloadEncryptedServlet,
     DownloadServlet,
 )
+from matrix_content_scanner.servlets.public_key import PublicKeyServlet
 from matrix_content_scanner.servlets.scan import ScanEncryptedServlet, ScanServlet
 from matrix_content_scanner.servlets.thumbnail import ThumbnailServlet
 
@@ -54,6 +55,7 @@ class HTTPServer:
         unstable.putChild(b"download", DownloadServlet(self._mcs))
         unstable.putChild(b"download_encrypted", DownloadEncryptedServlet(self._mcs))
         unstable.putChild(b"thumbnail", ThumbnailServlet(self._mcs))
+        unstable.putChild(b"public_key", PublicKeyServlet(self._mcs))
 
         return root
 
