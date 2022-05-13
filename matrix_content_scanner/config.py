@@ -31,7 +31,6 @@ class ScanConfig:
     temp_directory: str
     base_homeserver_url: Optional[str] = None
     do_not_cache_exit_codes: Optional[List[int]] = None
-    direct_download: bool = False
     removal_command: str = "rm"
     allowed_mimetypes: Optional[List[str]] = None
 
