@@ -14,6 +14,9 @@
 from typing import Any, Dict, List, Optional
 
 import attr
+import yaml
+
+from matrix_content_scanner.utils.errors import ConfigError
 
 
 @attr.s(auto_attribs=True, frozen=True)
@@ -40,7 +43,11 @@ class CryptoConfig:
 
 
 class MatrixContentScannerConfig:
-    def __init__(self, raw_config: Dict[str, Any]):
-        self.web = WebConfig(**(raw_config.get("web") or {}))
-        self.scan = ScanConfig(**(raw_config.get("scan") or {}))
-        self.crypto = CryptoConfig(**(raw_config.get("crypto") or {}))
+    def __init__(self, config_dict: Dict[str, Any]):
+        if not isinstance(config_dict, dict):
+            raise ConfigError("Bad configuration format")
+
+        self.web = WebConfig(**(config_dict.get("web") or {}))
+        self.scan = ScanConfig(**(config_dict.get("scan") or {}))
+        self.crypto = CryptoConfig(**(config_dict.get("crypto") or {}))
+

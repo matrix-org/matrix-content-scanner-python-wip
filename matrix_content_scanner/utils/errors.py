@@ -34,3 +34,7 @@ class FileDirtyError(ContentScannerRestError):
             reason=ErrCodes.NOT_CLEAN,
             info=info,
         )
+
+
+class ConfigError(Exception):
+    pass

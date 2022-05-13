@@ -11,10 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import argparse
 import logging
 from functools import cached_property
 
 import twisted.internet.reactor
+import yaml
 from twisted.internet.interfaces import (
     IReactorCore,
     IReactorPluggableNameResolver,
@@ -89,24 +91,18 @@ def setup_logging() -> None:
 
 
 if __name__ == "__main__":
-    cfg = MatrixContentScannerConfig(
-        {
-            "scan": {
-                "script": "true",
-                "temp_directory": "temp",
-                "allowed_mimetypes": ["image/jpeg"],
-            },
-            "web": {
-                "host": "127.0.0.1",
-                "port": 8080,
-            },
-            "crypto": {
-                "pickle_path": "/home/babolivier/Documents/matrix/matrix-content-scanner-python/mcs_pickle",
-                "pickle_key": "foo",
-            },
-        }
+    parser = argparse.ArgumentParser(
+        description="A web service for scanning media hosted by a Matrix media repository."
+    )
+    parser.add_argument(
+        "-c",
+        type=argparse.FileType("r"),
+        required=True,
+        help="The YAML configuration file.",
     )
 
-    reactor: Reactor = twisted.internet.reactor  # type: ignore[assignment]
-    mcs = MatrixContentScanner(cfg, reactor)
+    args = parser.parse_args()
+    cfg = MatrixContentScannerConfig(yaml.safe_load(args.c))
+
+    mcs = MatrixContentScanner(cfg)
     mcs.start()
