@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 class CacheEntry:
     result: bool
     media: MediaDescription
+    info: Optional[str] = None
 
 
 class Scanner:
@@ -86,7 +87,12 @@ class Scanner:
             logger.info("Returning cached result %s", cache_entry.result)
 
             if cache_entry.result is False:
-                raise FileDirtyError()
+                # If we defined additional info when caching the error, feed that into
+                # the new error.
+                if cache_entry.info is not None:
+                    raise FileDirtyError(info=cache_entry.info)
+                else:
+                    raise FileDirtyError()
 
             return cache_entry.media
 
@@ -103,7 +109,15 @@ class Scanner:
             media.content = self._decrypt_file(media.content, metadata)
             media.encrypted = True
 
-        self._check_mimetype(media)
+        try:
+            self._check_mimetype(media)
+        except FileDirtyError as e:
+            self._result_cache[cache_key] = CacheEntry(
+                result=False,
+                info=e.info,
+                media=media,
+            )
+            raise
 
         file_path = self._write_file_to_disk(media_path, media.content)
 

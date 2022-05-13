@@ -58,7 +58,9 @@ class _AsyncResource(Resource, metaclass=abc.ABCMeta):
 
             self._send_response(request, code, response)
         except ContentScannerRestError as e:
-            self._send_error(request, e.http_status, {"reason": e.reason, "info": e.info})
+            self._send_error(
+                request, e.http_status, {"reason": e.reason, "info": e.info}
+            )
         except Exception as e:
             logger.exception(e)
             self._send_error(

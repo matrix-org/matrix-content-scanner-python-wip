@@ -19,7 +19,10 @@ from twisted.web.client import Agent, readBody
 from twisted.web.iweb import IResponse
 
 from matrix_content_scanner.utils.constants import ErrCodes
-from matrix_content_scanner.utils.errors import ContentScannerRestError
+from matrix_content_scanner.utils.errors import (
+    ContentScannerRestError,
+    WellKnownDiscoveryError,
+)
 from matrix_content_scanner.utils.types import MediaDescription
 
 if TYPE_CHECKING:
@@ -44,6 +47,7 @@ class FileDownloader:
         self._base_url = mcs.config.scan.base_homeserver_url
         self._agent = Agent(mcs.reactor)
         self._store_directory = mcs.config.scan.temp_directory
+        self._well_known_cache: Dict[str, Optional[str]] = {}
 
     async def download_file(
         self,
@@ -65,7 +69,7 @@ class FileDownloader:
             ContentScannerRestError: The file was not found or could not be downloaded due to an
                 error on the remote homeserver's side.
         """
-        url = self._build_https_url(media_path, thumbnail_params=thumbnail_params)
+        url = await self._build_https_url(media_path, thumbnail_params=thumbnail_params)
 
         # Attempt to retrieve the file at the generated URL.
         try:
@@ -76,7 +80,7 @@ class FileDownloader:
             # again with an r0 endpoint.
             logger.info("File not found, trying legacy r0 path")
 
-            url = self._build_https_url(
+            url = await self._build_https_url(
                 media_path, endpoint_version="r0", thumbnail_params=thumbnail_params
             )
 
@@ -92,7 +96,7 @@ class FileDownloader:
 
         return file
 
-    def _build_https_url(
+    async def _build_https_url(
         self,
         media_path: str,
         endpoint_version: str = "v3",
@@ -117,12 +121,17 @@ class FileDownloader:
         """
         server_name, media_id = media_path.split("/")[-2:]
 
-        # FIXME: We currently use the server name directly to fetch a media if no base
-        #   URL has been provided. Ideally in this case we should be figuring out which
-        #   hostname to hit using well-known resolution.
-        base_url = "https://" + server_name
+        base_url = None
         if self._base_url is not None:
             base_url = self._base_url
+        else:
+            try:
+                base_url = await self._discover_via_well_known(server_name)
+            except WellKnownDiscoveryError as e:
+                logger.info("Failed to discover server via well-known: %s", e)
+
+        if base_url is None:
+            base_url = "https://" + server_name
 
         prefix = self.MEDIA_DOWNLOAD_PREFIX
         query = None
@@ -196,3 +205,50 @@ class FileDownloader:
             content_type=content_type_headers[0],
             content=await readBody(resp),
         )
+
+    async def _discover_via_well_known(self, domain) -> Optional[str]:
+        """Try to discover the base URL for the given domain via .well-known client
+        discovery.
+
+        Args:
+            domain: The domain to discover the base URL for.
+
+        Returns:
+            The base URL to use, or None if no .well-known client file exist for this
+            domain.
+
+        Raises:
+            WellKnownDiscoveryError if an error happened during the discovery attempt.
+        """
+        if domain in self._well_known_cache:
+            logger.info("[%s] Fetching well-known result from cache", domain)
+            return self._well_known_cache[domain]
+
+        url = f"https://{domain}/.well-known/matrix/client"
+        logger.info("[%s] Fetching well-known at %s", domain, url)
+
+        resp: IResponse = await self._agent.request(b"GET", url.encode("ascii"))
+
+        if resp.code != 200:
+            if resp.code == 404:
+                self._well_known_cache[domain] = None
+                return None
+
+            raise WellKnownDiscoveryError(
+                f"Server responded with non-200 status {resp.code}"
+            )
+
+        try:
+            body = json.loads(await readBody(resp))
+        except json.decoder.JSONDecodeError as e:
+            raise WellKnownDiscoveryError(e)
+
+        try:
+            # TODO: validate the URL
+            base_url = body["m.homeserver"]["base_url"]
+        except KeyError:
+            raise WellKnownDiscoveryError("Response did not include a usable URL")
+
+        # Cache and return the result.
+        self._well_known_cache[domain] = base_url
+        return base_url

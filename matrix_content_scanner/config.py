@@ -14,7 +14,6 @@
 from typing import Any, Dict, List, Optional
 
 import attr
-import yaml
 
 from matrix_content_scanner.utils.errors import ConfigError
 
@@ -49,4 +48,3 @@ class MatrixContentScannerConfig:
         self.web = WebConfig(**(config_dict.get("web") or {}))
         self.scan = ScanConfig(**(config_dict.get("scan") or {}))
         self.crypto = CryptoConfig(**(config_dict.get("crypto") or {}))
-

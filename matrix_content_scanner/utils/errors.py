@@ -38,3 +38,7 @@ class FileDirtyError(ContentScannerRestError):
 
 class ConfigError(Exception):
     pass
+
+
+class WellKnownDiscoveryError(Exception):
+    pass
