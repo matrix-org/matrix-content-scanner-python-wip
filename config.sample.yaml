@@ -1,0 +1,15 @@
+web:
+    host: 127.0.0.1
+    port: 8080
+
+scan:
+    script: "./example.sh"
+    temp_directory: "/tmp"
+    base_homeserver_url: "https://matrix.org"  # optional
+    do_not_cache_exit_codes: [1, 2]  # optional
+    removal_command: "srm"  # optional
+    allowed_mimetypes: ["image/jpeg"]  #optional
+
+crypto:
+    pickle_path: "./pickle"
+    pickle_key: "this_is_a_secret"
