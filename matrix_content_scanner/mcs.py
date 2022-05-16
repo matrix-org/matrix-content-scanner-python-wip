@@ -32,8 +32,6 @@ from matrix_content_scanner.httpserver import HTTPServer
 from matrix_content_scanner.scanner.file_downloader import FileDownloader
 from matrix_content_scanner.scanner.scanner import Scanner
 
-logger = logging.getLogger(__name__)
-
 
 class Reactor(
     IReactorCore,
@@ -76,7 +74,7 @@ class MatrixContentScanner:
 
 def setup_logging() -> None:
     """Basic logging setup."""
-    log_format = "%(asctime)s - %(name)s - %(lineno)d - %(levelname)s" " - %(message)s"
+    log_format = "%(asctime)s - %(name)s - %(lineno)d - %(levelname)s - %(message)s"
     formatter = logging.Formatter(log_format)
 
     handler = logging.StreamHandler()
@@ -85,6 +83,8 @@ def setup_logging() -> None:
     rootLogger = logging.getLogger("")
     rootLogger.setLevel("INFO")
     rootLogger.addHandler(handler)
+
+    logging.getLogger("twisted").setLevel(logging.WARNING)
 
     observer = log.PythonLoggingObserver()
     observer.start()

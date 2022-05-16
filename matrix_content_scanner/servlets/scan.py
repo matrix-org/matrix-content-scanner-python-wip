@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Tuple
 
 from twisted.web.http import Request
 
+from matrix_content_scanner.logging import set_media_path
 from matrix_content_scanner.servlets import (
     JsonResource,
     get_media_metadata_from_request,
@@ -36,6 +37,8 @@ class ScanServlet(JsonResource):
     async def on_GET(self, request: Request) -> Tuple[int, JsonDict]:
         # mypy doesn't recognise request.postpath but it does exist and is documented.
         media_path: bytes = b"/".join(request.postpath)  # type: ignore[attr-defined]
+
+        set_media_path(media_path)
 
         try:
             await self._scanner.scan_file(media_path.decode("ascii"), None)

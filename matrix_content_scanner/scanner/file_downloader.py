@@ -12,13 +12,13 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import json
-import logging
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 from twisted.internet.error import DNSLookupError
 from twisted.web.client import Agent, readBody
 from twisted.web.iweb import IResponse
 
+from matrix_content_scanner import logging
 from matrix_content_scanner.utils.constants import ErrCodes
 from matrix_content_scanner.utils.errors import (
     ContentScannerRestError,
@@ -241,7 +241,7 @@ class FileDownloader:
             return self._well_known_cache[domain]
 
         url = f"https://{domain}/.well-known/matrix/client"
-        logger.info("[%s] Fetching well-known at %s", domain, url)
+        logger.info("Fetching well-known at %s", url)
 
         resp: IResponse = await self._agent.request(b"GET", url.encode("ascii"))
 

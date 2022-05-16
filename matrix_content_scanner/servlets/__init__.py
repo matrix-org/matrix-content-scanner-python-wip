@@ -13,7 +13,6 @@
 #  limitations under the License.
 import abc
 import json
-import logging
 from typing import Any, Awaitable, Callable, Optional, Tuple
 
 from twisted.internet import defer
@@ -21,6 +20,7 @@ from twisted.web.http import Request
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
+from matrix_content_scanner import logging
 from matrix_content_scanner.crypto import CryptoHandler
 from matrix_content_scanner.utils.constants import ErrCodes
 from matrix_content_scanner.utils.encrypted_file_metadata import (

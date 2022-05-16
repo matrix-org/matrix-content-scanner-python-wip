@@ -12,11 +12,11 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import json
-import logging
 from typing import TYPE_CHECKING
 
 from olm.pk import PkDecryption, PkMessage
 
+from matrix_content_scanner import logging
 from matrix_content_scanner.utils.types import JsonDict
 
 if TYPE_CHECKING:
