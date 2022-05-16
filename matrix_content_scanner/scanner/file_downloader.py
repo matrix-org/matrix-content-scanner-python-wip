@@ -15,6 +15,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Dict, List, Optional
 
+from twisted.internet.error import DNSLookupError
 from twisted.web.client import Agent, readBody
 from twisted.web.iweb import IResponse
 
@@ -129,6 +130,12 @@ class FileDownloader:
                 base_url = await self._discover_via_well_known(server_name)
             except WellKnownDiscoveryError as e:
                 logger.info("Failed to discover server via well-known: %s", e)
+            except DNSLookupError:
+                raise ContentScannerRestError(
+                    502,
+                    ErrCodes.REQUEST_FAILED,
+                    "Failed to reach the remote server",
+                )
 
         if base_url is None:
             base_url = "https://" + server_name
@@ -168,7 +175,14 @@ class FileDownloader:
         """
         logger.info("Fetching file at URL: %s", url)
 
-        resp: IResponse = await self._agent.request(b"GET", url.encode("ascii"))
+        try:
+            resp: IResponse = await self._agent.request(b"GET", url.encode("ascii"))
+        except DNSLookupError:
+            raise ContentScannerRestError(
+                502,
+                ErrCodes.REQUEST_FAILED,
+                "Failed to reach the remote server",
+            )
 
         logger.info("Remote server responded with %d", resp.code)
 
@@ -206,7 +220,7 @@ class FileDownloader:
             content=await readBody(resp),
         )
 
-    async def _discover_via_well_known(self, domain) -> Optional[str]:
+    async def _discover_via_well_known(self, domain: str) -> Optional[str]:
         """Try to discover the base URL for the given domain via .well-known client
         discovery.
 
@@ -219,6 +233,8 @@ class FileDownloader:
 
         Raises:
             WellKnownDiscoveryError if an error happened during the discovery attempt.
+            twisted.internet.error.DNSLookupError if either the domain or the base URL it
+                advertises can't be reached.
         """
         if domain in self._well_known_cache:
             logger.info("[%s] Fetching well-known result from cache", domain)
@@ -244,10 +260,20 @@ class FileDownloader:
             raise WellKnownDiscoveryError(e)
 
         try:
-            # TODO: validate the URL
-            base_url = body["m.homeserver"]["base_url"]
+            base_url: str = body["m.homeserver"]["base_url"]
         except KeyError:
             raise WellKnownDiscoveryError("Response did not include a usable URL")
+
+        if base_url.endswith("/"):
+            base_url = base_url[:-1]
+
+        url = base_url + "/_matrix/client/versions"
+        resp = await self._agent.request(b"GET", url.encode("ascii"))
+
+        if resp.code != 200:
+            raise WellKnownDiscoveryError(
+                "Base URL does not seem to point to a working homeserver"
+            )
 
         # Cache and return the result.
         self._well_known_cache[domain] = base_url
