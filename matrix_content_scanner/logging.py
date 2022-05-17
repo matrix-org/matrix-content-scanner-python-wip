@@ -13,15 +13,23 @@
 #  limitations under the License.
 import logging
 from contextvars import ContextVar
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, TYPE_CHECKING
 
 from twisted.web.http import Request
 
 media_path: ContextVar[str] = ContextVar("media_path")
 request_type: ContextVar[str] = ContextVar("request_type")
 
+if TYPE_CHECKING:
+    # We need to do this because mypy considers LoggerAdapter to be a generic, but it's
+    # not the case at runtime on Python < 3.11.
+    # See https://github.com/python/typeshed/issues/7855
+    _LoggerAdapter = logging.LoggerAdapter[logging.Logger]
+else:
+    _LoggerAdapter = logging.LoggerAdapter
 
-class ContextLoggingAdapter(logging.LoggerAdapter):
+
+class ContextLoggingAdapter(_LoggerAdapter):
     def process(self, msg: str, kwargs: Any) -> Tuple[str, Any]:
         kwargs.setdefault("extra", {})["media_path"] = _maybe_get_contextvar(media_path)
         kwargs.setdefault("extra", {})["request_type"] = _maybe_get_contextvar(
