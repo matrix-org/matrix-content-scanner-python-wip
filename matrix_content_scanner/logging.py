@@ -13,7 +13,7 @@
 #  limitations under the License.
 import logging
 from contextvars import ContextVar
-from typing import Any, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional, Tuple
 
 from twisted.web.http import Request
 
