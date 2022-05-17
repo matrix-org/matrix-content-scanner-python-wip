@@ -178,13 +178,16 @@ class FileDownloader:
             logger.info("Response body: %s", body)
             # If the response is a 404 or an "unrecognised request" à la Synapse,
             # consider that we could not find the media.
-            if code == 400 or code == 404:
+            if code == 400:
                 try:
                     err = json.loads(body)
-                    if err["errcode"] == "M_UNRECOGNIZED" or code == 404:
+                    if err["errcode"] == "M_UNRECOGNIZED":
                         raise _MediaNotFoundException
                 except (json.decoder.JSONDecodeError, KeyError):
                     pass
+
+            if code == 404:
+                raise _MediaNotFoundException
 
             raise ContentScannerRestError(
                 502,
