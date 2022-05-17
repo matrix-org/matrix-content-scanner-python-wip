@@ -22,6 +22,7 @@ from twisted.web.server import NOT_DONE_YET
 
 from matrix_content_scanner import logging
 from matrix_content_scanner.crypto import CryptoHandler
+from matrix_content_scanner.logging import set_context_from_request, set_media_path
 from matrix_content_scanner.utils.constants import ErrCodes
 from matrix_content_scanner.utils.encrypted_file_metadata import (
     validate_encrypted_file_metadata,
@@ -53,6 +54,8 @@ class _AsyncResource(Resource, metaclass=abc.ABCMeta):
                 raise ContentScannerRestError(
                     404, ErrCodes.NOT_FOUND, "Route not found"
                 )
+
+            set_context_from_request(request)
 
             code, response = await method_handler(request)
 
@@ -130,7 +133,7 @@ class BytesResource(_AsyncResource):
 
 def get_media_metadata_from_request(
     request: Request, crypto_handler: CryptoHandler
-) -> JsonDict:
+) -> Tuple[str, JsonDict]:
     assert request.content is not None
     body = request.content.read().decode("ascii")
 
@@ -162,4 +165,8 @@ def get_media_metadata_from_request(
 
     validate_encrypted_file_metadata(metadata)
 
-    return metadata
+    url = metadata["file"]["url"]
+    media_path = url[len("mxc://") :]
+    set_media_path(media_path)
+
+    return media_path, metadata

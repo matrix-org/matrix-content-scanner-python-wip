@@ -74,7 +74,7 @@ class MatrixContentScanner:
 
 def setup_logging() -> None:
     """Basic logging setup."""
-    log_format = "%(asctime)s - %(name)s - %(lineno)d - %(levelname)s - %(message)s"
+    log_format = "%(asctime)s - %(name)s - %(lineno)d - %(levelname)s - %(request_type)s - %(media_path)s - %(message)s"
     formatter = logging.Formatter(log_format)
 
     handler = logging.StreamHandler()

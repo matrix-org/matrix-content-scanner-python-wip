@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Tuple
 
 from twisted.web.http import Request
 
-from matrix_content_scanner.logging import set_media_path
 from matrix_content_scanner.servlets import (
     JsonResource,
     get_media_metadata_from_request,
@@ -38,8 +37,6 @@ class ScanServlet(JsonResource):
         # mypy doesn't recognise request.postpath but it does exist and is documented.
         media_path: bytes = b"/".join(request.postpath)  # type: ignore[attr-defined]
 
-        set_media_path(media_path)
-
         try:
             await self._scanner.scan_file(media_path.decode("ascii"), None)
         except FileDirtyError as e:
@@ -57,13 +54,12 @@ class ScanEncryptedServlet(JsonResource):
         self._crypto_handler = content_scanner.crypto_handler
 
     async def on_POST(self, request: Request) -> Tuple[int, JsonDict]:
-        metadata = get_media_metadata_from_request(request, self._crypto_handler)
-
-        url = metadata["file"]["url"]
-        media_path = url[len("mxc://") :]
+        media_path, metadata = get_media_metadata_from_request(
+            request, self._crypto_handler
+        )
 
         try:
-            await self._scanner.scan_file(media_path.decode("ascii"), metadata)
+            await self._scanner.scan_file(media_path, metadata)
         except FileDirtyError:
             clean = False
         else:

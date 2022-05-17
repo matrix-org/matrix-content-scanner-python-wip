@@ -11,27 +11,49 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-import contextvars
 import logging
-from typing import Any, Tuple
+from contextvars import ContextVar
+from typing import Any, Optional, Tuple
 
-media_path = contextvars.ContextVar("media_path")
+from twisted.web.http import Request
+
+media_path: ContextVar[str] = ContextVar("media_path")
+request_type: ContextVar[str] = ContextVar("request_type")
 
 
 class ContextLoggingAdapter(logging.LoggerAdapter):
     def process(self, msg: str, kwargs: Any) -> Tuple[str, Any]:
-        try:
-            value = media_path.get()
-            msg = "%s - %s" % (value, msg)
-        except LookupError:
-            pass
+        kwargs.setdefault("extra", {})["media_path"] = _maybe_get_contextvar(media_path)
+        kwargs.setdefault("extra", {})["request_type"] = _maybe_get_contextvar(
+            request_type
+        )
 
         return msg, kwargs
+
+
+def _maybe_get_contextvar(var: ContextVar[str]) -> Optional[str]:
+    try:
+        return var.get()
+    except LookupError:
+        pass
+
+    return None
 
 
 def getLogger(name: str) -> ContextLoggingAdapter:
     return ContextLoggingAdapter(logging.getLogger(name), None)
 
 
-def set_media_path(v: bytes) -> None:
-    media_path.set(v.decode("utf-8"))
+def set_context_from_request(request: Request) -> None:
+    assert request.path is not None
+    path = request.path.decode("utf-8")
+    # We're only interested in the bit *after* /_matrix/media_proxy/unstable
+    parts = path.split("/")[4:]
+
+    request_type.set(parts[0])
+    if len(parts) == 3:
+        media_path.set("/".join(parts[1:]))
+
+
+def set_media_path(v: str) -> None:
+    media_path.set(v)

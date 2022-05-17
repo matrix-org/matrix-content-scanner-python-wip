@@ -237,7 +237,7 @@ class FileDownloader:
                 advertises can't be reached.
         """
         if domain in self._well_known_cache:
-            logger.info("[%s] Fetching well-known result from cache", domain)
+            logger.info("Fetching well-known result from cache")
             return self._well_known_cache[domain]
 
         url = f"https://{domain}/.well-known/matrix/client"

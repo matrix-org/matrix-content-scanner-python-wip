@@ -48,10 +48,9 @@ class DownloadEncryptedServlet(BytesResource):
         self._crypto_handler = content_scanner.crypto_handler
 
     async def on_POST(self, request: Request) -> Tuple[int, Union[bytes, JsonDict]]:
-        metadata = get_media_metadata_from_request(request, self._crypto_handler)
-
-        url = metadata["file"]["url"]
-        media_path = url[len("mxc://") :]
+        media_path, metadata = get_media_metadata_from_request(
+            request, self._crypto_handler
+        )
 
         media = await self._scanner.scan_file(media_path, metadata)
         request.setHeader("Content-Type", media.content_type)
