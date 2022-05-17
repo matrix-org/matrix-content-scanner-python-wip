@@ -22,7 +22,10 @@ from twisted.web.server import NOT_DONE_YET
 
 from matrix_content_scanner import logging
 from matrix_content_scanner.crypto import CryptoHandler
-from matrix_content_scanner.logging import set_context_from_request, set_media_path
+from matrix_content_scanner.logging import (
+    set_context_from_request,
+    set_media_path_in_context,
+)
 from matrix_content_scanner.utils.constants import ErrCodes
 from matrix_content_scanner.utils.encrypted_file_metadata import (
     validate_encrypted_file_metadata,
@@ -167,6 +170,6 @@ def get_media_metadata_from_request(
 
     url = metadata["file"]["url"]
     media_path = url[len("mxc://") :]
-    set_media_path(media_path)
+    set_media_path_in_context(media_path)
 
     return media_path, metadata

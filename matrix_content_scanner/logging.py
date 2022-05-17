@@ -55,5 +55,5 @@ def set_context_from_request(request: Request) -> None:
         media_path.set("/".join(parts[1:]))
 
 
-def set_media_path(v: str) -> None:
+def set_media_path_in_context(v: str) -> None:
     media_path.set(v)
