@@ -12,10 +12,11 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import json
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from twisted.internet.error import DNSLookupError
 from twisted.web.client import Agent, readBody
+from twisted.web.http_headers import Headers
 from twisted.web.iweb import IResponse
 
 from matrix_content_scanner import logging
@@ -47,7 +48,6 @@ class FileDownloader:
     def __init__(self, mcs: "MatrixContentScanner"):
         self._base_url = mcs.config.scan.base_homeserver_url
         self._agent = Agent(mcs.reactor)
-        self._store_directory = mcs.config.scan.temp_directory
         self._well_known_cache: Dict[str, Optional[str]] = {}
 
     async def download_file(
@@ -130,12 +130,6 @@ class FileDownloader:
                 base_url = await self._discover_via_well_known(server_name)
             except WellKnownDiscoveryError as e:
                 logger.info("Failed to discover server via well-known: %s", e)
-            except DNSLookupError:
-                raise ContentScannerRestError(
-                    502,
-                    ErrCodes.REQUEST_FAILED,
-                    "Failed to reach the remote server",
-                )
 
         if base_url is None:
             base_url = "https://" + server_name
@@ -175,27 +169,19 @@ class FileDownloader:
         """
         logger.info("Fetching file at URL: %s", url)
 
-        try:
-            resp: IResponse = await self._agent.request(b"GET", url.encode("ascii"))
-        except DNSLookupError:
-            raise ContentScannerRestError(
-                502,
-                ErrCodes.REQUEST_FAILED,
-                "Failed to reach the remote server",
-            )
+        code, body, headers = await self._get(url)
 
-        logger.info("Remote server responded with %d", resp.code)
+        logger.info("Remote server responded with %d", code)
 
         # If the response isn't a 200 OK, raise.
-        if 200 < resp.code:
-            body = await readBody(resp)
+        if 200 < code:
             logger.info("Response body: %s", body)
             # If the response is a 404 or an "unrecognised request" à la Synapse,
             # consider that we could not find the media.
-            if resp.code == 400 or resp.code == 404:
+            if code == 400 or code == 404:
                 try:
                     err = json.loads(body)
-                    if err["errcode"] == "M_UNRECOGNIZED" or resp.code == 404:
+                    if err["errcode"] == "M_UNRECOGNIZED" or code == 404:
                         raise _MediaNotFoundException
                 except (json.decoder.JSONDecodeError, KeyError):
                     pass
@@ -206,7 +192,7 @@ class FileDownloader:
                 "The remote server responded with an error",
             )
 
-        content_type_headers = resp.headers.getRawHeaders("content-type")
+        content_type_headers = headers.getRawHeaders("content-type")
 
         if content_type_headers is None or len(content_type_headers) != 1:
             raise ContentScannerRestError(
@@ -217,7 +203,7 @@ class FileDownloader:
 
         return MediaDescription(
             content_type=content_type_headers[0],
-            content=await readBody(resp),
+            content=body,
         )
 
     async def _discover_via_well_known(self, domain: str) -> Optional[str]:
@@ -243,24 +229,24 @@ class FileDownloader:
         url = f"https://{domain}/.well-known/matrix/client"
         logger.info("Fetching well-known at %s", url)
 
-        resp: IResponse = await self._agent.request(b"GET", url.encode("ascii"))
+        code, body, _ = await self._get(url)
 
-        if resp.code != 200:
-            if resp.code == 404:
+        if code != 200:
+            if code == 404:
                 self._well_known_cache[domain] = None
                 return None
 
             raise WellKnownDiscoveryError(
-                f"Server responded with non-200 status {resp.code}"
+                f"Server responded with non-200 status {code}"
             )
 
         try:
-            body = json.loads(await readBody(resp))
+            parsed_body = json.loads(body)
         except json.decoder.JSONDecodeError as e:
             raise WellKnownDiscoveryError(e)
 
         try:
-            base_url: str = body["m.homeserver"]["base_url"]
+            base_url: str = parsed_body["m.homeserver"]["base_url"]
         except KeyError:
             raise WellKnownDiscoveryError("Response did not include a usable URL")
 
@@ -268,9 +254,9 @@ class FileDownloader:
             base_url = base_url[:-1]
 
         url = base_url + "/_matrix/client/versions"
-        resp = await self._agent.request(b"GET", url.encode("ascii"))
+        code, _, _ = await self._get(url)
 
-        if resp.code != 200:
+        if code != 200:
             raise WellKnownDiscoveryError(
                 "Base URL does not seem to point to a working homeserver"
             )
@@ -278,3 +264,15 @@ class FileDownloader:
         # Cache and return the result.
         self._well_known_cache[domain] = base_url
         return base_url
+
+    async def _get(self, url: str) -> Tuple[int, bytes, Headers]:
+        try:
+            resp: IResponse = await self._agent.request(b"GET", url.encode("ascii"))
+        except DNSLookupError:
+            raise ContentScannerRestError(
+                502,
+                ErrCodes.REQUEST_FAILED,
+                "Failed to reach the remote server",
+            )
+
+        return resp.code, await readBody(resp), resp.headers
