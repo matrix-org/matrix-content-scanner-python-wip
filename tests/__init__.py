@@ -14,6 +14,8 @@
 from binascii import unhexlify
 from typing import Optional
 
+from twisted.web.http_headers import Headers
+
 from matrix_content_scanner.config import MatrixContentScannerConfig
 from matrix_content_scanner.mcs import MatrixContentScanner
 from matrix_content_scanner.utils.types import JsonDict
@@ -23,6 +25,12 @@ SMALL_PNG = unhexlify(
     b"0000001f15c4890000000a49444154789c63000100000500010d"
     b"0a2db40000000049454e44ae426082"
 )
+
+
+def get_base_media_headers() -> Headers:
+    media_headers = Headers()
+    media_headers.setRawHeaders("content-type", ["image/png"])
+    return media_headers
 
 
 def get_content_scanner(config: Optional[JsonDict] = None) -> MatrixContentScanner:

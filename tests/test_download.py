@@ -12,14 +12,16 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import json
-from typing import Tuple
+from typing import Tuple, Union
 from unittest.mock import Mock
 
 import aiounittest
 from twisted.web.http_headers import Headers
 
-from matrix_content_scanner.utils.errors import ContentScannerRestError
-from tests import SMALL_PNG, get_content_scanner
+from matrix_content_scanner.utils.errors import ContentScannerRestError, \
+    WellKnownDiscoveryError
+from matrix_content_scanner.utils.types import JsonDict
+from tests import SMALL_PNG, get_content_scanner, get_base_media_headers
 
 
 class FileDownloaderTestCase(aiounittest.AsyncTestCase):
@@ -29,8 +31,7 @@ class FileDownloaderTestCase(aiounittest.AsyncTestCase):
         self.media_status = 200
         self.media_body = SMALL_PNG
 
-        self.media_headers = Headers()
-        self.media_headers.setRawHeaders("content-type", ["image/png"])
+        self.media_headers = get_base_media_headers()
 
         async def _get(url: str) -> Tuple[int, bytes, Headers]:
             if (
@@ -101,3 +102,64 @@ class FileDownloaderTestCase(aiounittest.AsyncTestCase):
 
         self.assertEqual(cm.exception.http_status, 502)
         self.assertTrue("Content-Type" in cm.exception.info)
+
+
+class WellKnownDiscoveryTestCase(aiounittest.AsyncTestCase):
+    def setUp(self) -> None:
+        self.downloader = get_content_scanner().file_downloader
+
+        self.well_known_status = 200
+        self.well_known_body: Union[bytes, JsonDict] = b''
+
+        self.versions_status = 200
+
+        async def _get(url: str) -> Tuple[int, bytes, Headers]:
+            if url.endswith("/.well-known/matrix/client"):
+                if isinstance(self.well_known_body, bytes):
+                    body_bytes = self.well_known_body
+                else:
+                    body_bytes = json.dumps(self.well_known_body).encode("utf-8")
+
+                return self.well_known_status, body_bytes, Headers()
+            elif url.endswith("/_matrix/client/versions"):
+                return self.versions_status, b'{}', Headers()
+            elif url.endswith("/_matrix/media/v3/download/foo/bar"):
+                return 200, SMALL_PNG, get_base_media_headers()
+
+            raise RuntimeError("Unexpected request on %s" % url)
+
+        self.get_mock = Mock(side_effect=_get)
+        self.downloader._get = self.get_mock  # type: ignore[assignment]
+
+    async def test_discover(self) -> None:
+        self.well_known_body = {"m.homeserver": {"base_url": "https://foo.bar"}}
+
+        await self.downloader.download_file("foo/bar")
+
+        self.assertEqual(self.get_mock.call_count, 3, self.get_mock.mock_calls)
+
+        calls = self.get_mock.mock_calls
+
+        self.assertEqual(calls[0].args[0], "https://foo/.well-known/matrix/client")
+        self.assertTrue(calls[1].args[0], "https://foo.bar/_matrix/client/versions")
+
+    async def test_error_status(self) -> None:
+        self.well_known_status = 401
+        await self._assert_discovery_fail()
+
+    async def test_malformed_content(self) -> None:
+        self.well_known_body = {"m.homeserver": "https://foo.bar"}
+        await self._assert_discovery_fail()
+
+    async def test_not_valid_homeserver(self) -> None:
+        self.versions_status = 404
+        await self._assert_discovery_fail()
+
+    async def test_404_no_fail(self) -> None:
+        self.well_known_status = 404
+        res = await self.downloader._discover_via_well_known("foo")
+        self.assertIsNone(res)
+
+    async def _assert_discovery_fail(self) -> None:
+        with self.assertRaises(WellKnownDiscoveryError):
+            await self.downloader._discover_via_well_known("foo")

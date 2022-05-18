@@ -250,7 +250,7 @@ class FileDownloader:
 
         try:
             base_url: str = parsed_body["m.homeserver"]["base_url"]
-        except KeyError:
+        except (KeyError, TypeError):
             raise WellKnownDiscoveryError("Response did not include a usable URL")
 
         if base_url.endswith("/"):
