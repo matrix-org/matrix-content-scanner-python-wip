@@ -62,6 +62,8 @@ class _AsyncResource(Resource, metaclass=abc.ABCMeta):
 
             code, response = await method_handler(request)
 
+            self._log(request, code)
+
             self._send_response(request, code, response)
         except ContentScannerRestError as e:
             self._send_error(
@@ -74,11 +76,20 @@ class _AsyncResource(Resource, metaclass=abc.ABCMeta):
             )
 
     def _send_error(self, request: Request, status: int, content: JsonDict) -> None:
+        self._log(request, status)
         request.setResponseCode(status)
         request.setHeader("Content-Type", "application/json")
         res = _dict_to_json_bytes(content)
         request.write(res)
         request.finish()
+
+    def _log(self, request: Request, status: int) -> None:
+        logger.info(
+            "Processed request %s %s (%d)",
+            request.method.decode("ascii"),
+            request.path.decode("utf-8"),
+            status,
+        )
 
     @abc.abstractmethod
     def _send_response(
