@@ -137,7 +137,13 @@ class BytesResource(_AsyncResource):
 def get_media_metadata_from_request(
     request: Request, crypto_handler: CryptoHandler
 ) -> Tuple[str, JsonDict]:
-    assert request.content is not None
+    if request.content is None:
+        raise ContentScannerRestError(
+            400,
+            ErrCodes.MALFORMED_JSON,
+            "No content on request",
+        )
+
     body = request.content.read().decode("ascii")
 
     try:
