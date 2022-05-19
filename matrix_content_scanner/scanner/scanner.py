@@ -47,7 +47,7 @@ class Scanner:
         self._result_cache: Dict[str, CacheEntry] = {}
         self._exit_codes_to_ignore = mcs.config.scan.do_not_cache_exit_codes
         self._removal_command = mcs.config.scan.removal_command
-        self._store_directory = mcs.config.scan.temp_directory
+        self._store_directory = os.path.abspath(mcs.config.scan.temp_directory)
         self._allowed_mimetypes = mcs.config.scan.allowed_mimetypes
 
     async def scan_file(
@@ -130,7 +130,14 @@ class Scanner:
             )
             raise
 
-        file_path = self._write_file_to_disk(media_path, clear_media.content)
+        try:
+            file_path = self._write_file_to_disk(media_path, clear_media.content)
+        except FileDirtyError as e:
+            self._result_cache[cache_key] = CacheEntry(
+                result=False,
+                info=e.info,
+            )
+            raise
 
         exit_code = self._run_scan(file_path)
         result = exit_code == 0
@@ -233,9 +240,18 @@ class Scanner:
 
         Returns:
             The full path to the newly written file.
+
+        Raises:
+            FileDirtyError if the media path is malformed in a way that would cause the
+                file to be written outside of the configured directory.
         """
-        # Figure out the full absolute path for this file.
+        # Figure out the full absolute path for this file. Given _store_directory is
+        # already an absolute path we likely already have an absolute path, but we want to
+        # make sure we don't have any '..' etc in the full path, to make sure we don't try
+        # to write outside the directory.
         full_path = os.path.abspath(os.path.join(self._store_directory, media_path))
+        if not full_path.startswith(self._store_directory):
+            raise FileDirtyError("Malformed media ID")
 
         logger.info("Writing file to %s", full_path)
 
