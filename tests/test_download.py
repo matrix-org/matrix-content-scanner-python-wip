@@ -18,10 +18,12 @@ from unittest.mock import Mock
 import aiounittest
 from twisted.web.http_headers import Headers
 
-from matrix_content_scanner.utils.errors import ContentScannerRestError, \
-    WellKnownDiscoveryError
+from matrix_content_scanner.utils.errors import (
+    ContentScannerRestError,
+    WellKnownDiscoveryError,
+)
 from matrix_content_scanner.utils.types import JsonDict
-from tests import SMALL_PNG, get_content_scanner, get_base_media_headers
+from tests import SMALL_PNG, get_base_media_headers, get_content_scanner
 
 
 class FileDownloaderTestCase(aiounittest.AsyncTestCase):
@@ -109,7 +111,7 @@ class WellKnownDiscoveryTestCase(aiounittest.AsyncTestCase):
         self.downloader = get_content_scanner().file_downloader
 
         self.well_known_status = 200
-        self.well_known_body: Union[bytes, JsonDict] = b''
+        self.well_known_body: Union[bytes, JsonDict] = b""
 
         self.versions_status = 200
 
@@ -122,7 +124,7 @@ class WellKnownDiscoveryTestCase(aiounittest.AsyncTestCase):
 
                 return self.well_known_status, body_bytes, Headers()
             elif url.endswith("/_matrix/client/versions"):
-                return self.versions_status, b'{}', Headers()
+                return self.versions_status, b"{}", Headers()
             elif url.endswith("/_matrix/media/v3/download/foo/bar"):
                 return 200, SMALL_PNG, get_base_media_headers()
 
