@@ -23,7 +23,7 @@ from matrix_content_scanner.utils.errors import (
     WellKnownDiscoveryError,
 )
 from matrix_content_scanner.utils.types import JsonDict
-from tests import SMALL_PNG, get_base_media_headers, get_content_scanner
+from tests.testutils import SMALL_PNG, get_base_media_headers, get_content_scanner
 
 
 class FileDownloaderTestCase(aiounittest.AsyncTestCase):

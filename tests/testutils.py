@@ -51,24 +51,19 @@ SMALL_PNG_ENCRYPTED = unhexlify(
     b"4a"
 )
 
-ENCRYPTED_FILE_METADATA = {
+ENCRYPTED_FILE_METADATA: JsonDict = {
     "file": {
         "v": "v2",
         "key": {
             "alg": "A256CTR",
             "ext": True,
             "k": "F3miZm2vZhucJ062AuKMUwmd-O6AK0AXP29p4MKtq3Q",
-            "key_ops": [
-                "encrypt",
-                "decrypt"
-            ],
-            "kty": "oct"
+            "key_ops": ["encrypt", "decrypt"],
+            "kty": "oct",
         },
         "iv": "rJqtSdi3F/EAAAAAAAAAAA",
-        "hashes": {
-            "sha256": "NYvGRRQGfyWpXSUpba+ozSbehFP6kw5ZDg0xMppyX8c"
-        },
-        "url": "mxc://foo/bar"
+        "hashes": {"sha256": "NYvGRRQGfyWpXSUpba+ozSbehFP6kw5ZDg0xMppyX8c"},
+        "url": "mxc://foo/bar",
     }
 }
 

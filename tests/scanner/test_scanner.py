@@ -12,17 +12,20 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import copy
-import logging
 from typing import Dict, List, Optional
 from unittest.mock import Mock
 
 import aiounittest
 
 from matrix_content_scanner.utils.constants import ErrCodes
-from matrix_content_scanner.utils.errors import FileDirtyError, ContentScannerRestError
+from matrix_content_scanner.utils.errors import ContentScannerRestError, FileDirtyError
 from matrix_content_scanner.utils.types import MediaDescription
-from tests import SMALL_PNG, get_content_scanner, SMALL_PNG_ENCRYPTED, \
-    ENCRYPTED_FILE_METADATA
+from tests.testutils import (
+    ENCRYPTED_FILE_METADATA,
+    SMALL_PNG,
+    SMALL_PNG_ENCRYPTED,
+    get_content_scanner,
+)
 
 
 class ScannerTestCase(aiounittest.AsyncTestCase):
