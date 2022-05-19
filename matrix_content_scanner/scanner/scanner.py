@@ -149,14 +149,9 @@ class Scanner:
         ):
             logger.info("Caching result %s", result)
 
-            if result is False:
-                # Don't cache the bad file, otherwise we might end up using lots of memory
-                # for data we don't need.
-                media = None
-
             self._result_cache[cache_key] = CacheEntry(
                 result=result,
-                media=media,
+                media=media if result is True else None,
             )
         else:
             logger.info(
