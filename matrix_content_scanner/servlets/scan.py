@@ -38,7 +38,7 @@ class ScanServlet(JsonResource):
         media_path: bytes = b"/".join(request.postpath)  # type: ignore[attr-defined]
 
         try:
-            await self._scanner.scan_file(media_path.decode("ascii"), None)
+            await self._scanner.scan_file(media_path.decode("ascii"))
         except FileDirtyError as e:
             res = {"clean": False, "info": e.info}
         else:

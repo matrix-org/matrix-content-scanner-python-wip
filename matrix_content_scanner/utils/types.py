@@ -20,7 +20,6 @@ import attr
 class MediaDescription:
     content_type: str
     content: bytes
-    encrypted: bool = False
 
 
 JsonDict = Dict[str, Any]

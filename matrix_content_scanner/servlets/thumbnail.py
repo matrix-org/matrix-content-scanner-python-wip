@@ -44,7 +44,6 @@ class ThumbnailServlet(BytesResource):
 
         media = await self._scanner.scan_file(
             media_path=media_path.decode("ascii"),
-            metadata=None,
             thumbnail_params=thumbnail_params,
         )
         request.setHeader("Content-Type", media.content_type)

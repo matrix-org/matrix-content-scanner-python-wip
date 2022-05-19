@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 @attr.s(auto_attribs=True, frozen=True)
 class CacheEntry:
     result: bool
-    media: MediaDescription
+    media: Optional[MediaDescription] = None
     info: Optional[str] = None
 
 
@@ -53,7 +53,7 @@ class Scanner:
     async def scan_file(
         self,
         media_path: str,
-        metadata: Optional[JsonDict],
+        metadata: Optional[JsonDict] = None,
         thumbnail_params: Optional[Dict[str, List[str]]] = None,
     ) -> MediaDescription:
         """Download and scan the given media.
@@ -93,8 +93,13 @@ class Scanner:
                     raise FileDirtyError(info=cache_entry.info)
                 else:
                     raise FileDirtyError()
+            else:
+                if cache_entry.media is not None:
+                    return cache_entry.media
 
-            return cache_entry.media
+                logger.warning(
+                    "Result cache is confused: missing media but result is True.",
+                )
 
         # Download the file, and decrypt it if necessary.
         media = await self._file_downloader.download_file(
@@ -106,20 +111,26 @@ class Scanner:
             # If the file is encrypted, we need to decrypt it before we can scan it, but
             # we also need to keep the encrypted body in memory in case we want to return
             # it to the client.
-            media.content = self._decrypt_file(media.content, metadata)
-            media.encrypted = True
+            clear_media = MediaDescription(
+                content=self._decrypt_file(media.content, metadata),
+                content_type="",
+            )
+        else:
+            clear_media = media
 
         try:
-            self._check_mimetype(media)
+            self._check_mimetype(
+                media=clear_media,
+                encrypted=metadata is not None,
+            )
         except FileDirtyError as e:
             self._result_cache[cache_key] = CacheEntry(
                 result=False,
                 info=e.info,
-                media=media,
             )
             raise
 
-        file_path = self._write_file_to_disk(media_path, media.content)
+        file_path = self._write_file_to_disk(media_path, clear_media.content)
 
         exit_code = self._run_scan(file_path)
         result = exit_code == 0
@@ -130,6 +141,12 @@ class Scanner:
             or exit_code not in self._exit_codes_to_ignore
         ):
             logger.info("Caching result %s", result)
+
+            if result is False:
+                # Don't cache the bad file, otherwise we might end up using lots of memory
+                # for data we don't need.
+                media = None
+
             self._result_cache[cache_key] = CacheEntry(
                 result=result,
                 media=media,
@@ -247,12 +264,12 @@ class Scanner:
             logger.info("Scan failed with exit code %d: %s", e.returncode, e.stderr)
             return e.returncode
 
-    def _check_mimetype(self, media: MediaDescription) -> None:
+    def _check_mimetype(self, media: MediaDescription, encrypted: bool) -> None:
         mimetype = magic.mimetype(media.content)
 
         logger.info("File is %s", mimetype)
 
-        if media.encrypted is False and mimetype != media.content_type:
+        if encrypted is False and mimetype != media.content_type:
             # Error if the MIME type isn't matching the one that's expected, but only if
             # the file is not encrypted (because otherwise we'll always have
             # 'application/octet-stream' in the Content-Type header).
