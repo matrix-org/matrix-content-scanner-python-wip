@@ -13,7 +13,7 @@
 #  limitations under the License.
 import json
 from typing import Tuple, Union
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import aiounittest
 from twisted.web.http_headers import Headers
@@ -142,8 +142,8 @@ class WellKnownDiscoveryTestCase(aiounittest.AsyncTestCase):
 
         calls = self.get_mock.mock_calls
 
-        self.assertEqual(calls[0].args[0], "https://foo/.well-known/matrix/client")
-        self.assertTrue(calls[1].args[0], "https://foo.bar/_matrix/client/versions")
+        self.assertEqual(calls[0], call("https://foo/.well-known/matrix/client"))
+        self.assertTrue(calls[1], call("https://foo.bar/_matrix/client/versions"))
 
     async def test_error_status(self) -> None:
         self.well_known_status = 401
