@@ -13,6 +13,7 @@
 # limitations under the License.
 import argparse
 import logging
+import sys
 from functools import cached_property
 
 import twisted.internet.reactor
@@ -25,12 +26,17 @@ from twisted.internet.interfaces import (
     IReactorTime,
 )
 from twisted.python import log
+from yaml.scanner import ScannerError
 
+from matrix_content_scanner import logging as mcs_logging
 from matrix_content_scanner.config import MatrixContentScannerConfig
 from matrix_content_scanner.crypto import CryptoHandler
 from matrix_content_scanner.httpserver import HTTPServer
 from matrix_content_scanner.scanner.file_downloader import FileDownloader
 from matrix_content_scanner.scanner.scanner import Scanner
+from matrix_content_scanner.utils.errors import ConfigError
+
+logger = mcs_logging.getLogger(__name__)
 
 
 class Reactor(
@@ -102,7 +108,12 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    cfg = MatrixContentScannerConfig(yaml.safe_load(args.c))
+
+    try:
+        cfg = MatrixContentScannerConfig(yaml.safe_load(args.c))
+    except (ConfigError, ScannerError) as e:
+        logger.error("Failed to read configuration file: %s", e)
+        sys.exit(1)
 
     mcs = MatrixContentScanner(cfg)
     mcs.start()
