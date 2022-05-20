@@ -14,7 +14,7 @@
 import argparse
 import logging
 import sys
-from functools import cached_property
+from functools import lru_cache
 
 import twisted.internet.reactor
 import yaml
@@ -47,6 +47,12 @@ class Reactor(
     IReactorPluggableNameResolver,
 ):
     pass
+
+
+def cached_property(f):
+    """Reproduces the effect of functools.cached_property, which does not exist in Python
+    3.7."""
+    return property(lru_cache()(f))
 
 
 class MatrixContentScanner:
