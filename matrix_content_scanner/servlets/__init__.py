@@ -84,10 +84,15 @@ class _AsyncResource(Resource, metaclass=abc.ABCMeta):
         request.finish()
 
     def _log(self, request: Request, status: int) -> None:
+        if request.path is not None:
+            path = request.path.decode("utf-8")
+        else:
+            path = None
+
         logger.info(
             "Processed request %s %s (%d)",
             request.method.decode("ascii"),
-            request.path.decode("utf-8"),
+            path,
             status,
         )
 
