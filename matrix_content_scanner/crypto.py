@@ -51,8 +51,7 @@ class CryptoHandler:
             with open(path, "w+") as fp:
                 fp.write(pickle_bytes.decode("ascii"))
 
-    def get_public_key(self) -> str:
-        return self._decryptor.public_key
+        self.public_key = self._decryptor.public_key
 
     def decrypt_body(self, ciphertext: str, mac: str, ephemeral: str) -> JsonDict:
         msg = PkMessage(

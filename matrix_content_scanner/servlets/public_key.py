@@ -28,5 +28,4 @@ class PublicKeyServlet(JsonResource):
         self._crypto_handler = content_scanner.crypto_handler
 
     async def on_GET(self, request: Request) -> Tuple[int, JsonDict]:
-        public_key = self._crypto_handler.get_public_key()
-        return 200, {"public_key": public_key}
+        return 200, {"public_key": self._crypto_handler.public_key}
