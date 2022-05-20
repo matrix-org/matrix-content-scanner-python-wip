@@ -162,6 +162,18 @@ def get_media_metadata_from_request(
 
     body = request.content.read().decode("ascii")
 
+    metadata = _metadata_from_body(body, crypto_handler)
+
+    validate_encrypted_file_metadata(metadata)
+
+    url = metadata["file"]["url"]
+    media_path = url[len("mxc://") :]
+    set_media_path_in_context(media_path)
+
+    return media_path, metadata
+
+
+def _metadata_from_body(body: str, crypto_handler: CryptoHandler) -> JsonDict:
     try:
         parsed_body = json.loads(body)
     except json.decoder.JSONDecodeError as e:
@@ -175,23 +187,13 @@ def get_media_metadata_from_request(
         )
 
     encrypted_body: Optional[JsonDict] = parsed_body.get("encrypted_body")
-    if encrypted_body is not None:
-        # If we have an encrypted payload in the body, decrypt it before doing
-        # anything else.
-        metadata = crypto_handler.decrypt_body(
-            ciphertext=encrypted_body["ciphertext"],
-            mac=encrypted_body["mac"],
-            ephemeral=encrypted_body["ephemeral"],
-        )
-    else:
-        # Otherwise, use the request's body since it will include the metadata in
-        # clear text.
-        metadata = parsed_body
 
-    validate_encrypted_file_metadata(metadata)
+    if encrypted_body is None:
+        return parsed_body
 
-    url = metadata["file"]["url"]
-    media_path = url[len("mxc://") :]
-    set_media_path_in_context(media_path)
-
-    return media_path, metadata
+    # If we have an encrypted payload in the body, decrypt it.
+    return crypto_handler.decrypt_body(
+        ciphertext=encrypted_body["ciphertext"],
+        mac=encrypted_body["mac"],
+        ephemeral=encrypted_body["ephemeral"],
+    )
