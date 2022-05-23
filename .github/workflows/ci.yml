@@ -9,7 +9,7 @@ jobs:
     name: Check code style
     runs-on: ubuntu-latest
     steps:
-      - run: sudo apt-get install -y libolm-dev
+      - run: sudo apt-get install -y libolm-dev libmagic1
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
         with:
@@ -21,7 +21,7 @@ jobs:
     name: Check types with Mypy
     runs-on: ubuntu-latest
     steps:
-      - run: sudo apt-get install -y libolm-dev
+      - run: sudo apt-get install -y libolm-dev libmagic1
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
         with:
@@ -36,9 +36,9 @@ jobs:
       matrix:
         # Run the unit tests both against our oldest supported Python version
         # and the newest stable.
-        python_version: [ "3.7", "3.x" ]
+        python_version: [ "3.8", "3.x" ]
     steps:
-      - run: sudo apt-get install -y libolm-dev
+      - run: sudo apt-get install -y libolm-dev libmagic1
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
         with:
