@@ -12,12 +12,14 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import json
+import urllib.parse
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
+from twisted.internet.endpoints import HostnameEndpoint, wrapClientTLS
 from twisted.internet.error import DNSLookupError
-from twisted.web.client import Agent, readBody
+from twisted.web.client import Agent, BrowserLikePolicyForHTTPS, ProxyAgent, readBody
 from twisted.web.http_headers import Headers
-from twisted.web.iweb import IResponse
+from twisted.web.iweb import IAgent, IResponse
 
 from matrix_content_scanner import logging
 from matrix_content_scanner.utils.constants import ErrCodes
@@ -47,8 +49,34 @@ class FileDownloader:
 
     def __init__(self, mcs: "MatrixContentScanner"):
         self._base_url = mcs.config.scan.base_homeserver_url
-        self._agent = Agent(mcs.reactor)
+        self._agent = self._get_agent(mcs)
         self._well_known_cache: Dict[str, Optional[str]] = {}
+
+    def _get_agent(self, mcs: "MatrixContentScanner") -> IAgent:
+        """Instantiates the Twisted agent to use to make requests.
+
+        This will be a ProxyAgent if a proxy is configured, and a basic Agent otherwise.
+
+        Args:
+            mcs: The content scanner instance to use to build the agent.
+
+        Returns:
+            The agent to use.
+        """
+        if mcs.config.scan.proxy is None:
+            return Agent(mcs.reactor)
+
+        proxy_url = urllib.parse.urlparse(mcs.config.scan.proxy.encode("utf-8"))
+
+        endpoint = HostnameEndpoint(mcs.reactor, proxy_url.hostname, proxy_url.port)
+        if proxy_url.scheme == b"https":
+            policy = BrowserLikePolicyForHTTPS()
+            endpoint = wrapClientTLS(
+                policy.creatorForNetloc(proxy_url.hostname, proxy_url.port),
+                endpoint,
+            )
+
+        return ProxyAgent(endpoint, mcs.reactor)
 
     async def download_file(
         self,
@@ -271,7 +299,8 @@ class FileDownloader:
     async def _get(self, url: str) -> Tuple[int, bytes, Headers]:
         try:
             resp: IResponse = await self._agent.request(b"GET", url.encode("ascii"))
-        except DNSLookupError:
+        except DNSLookupError as e:
+            logger.warning(e)
             raise ContentScannerRestError(
                 502,
                 ErrCodes.REQUEST_FAILED,

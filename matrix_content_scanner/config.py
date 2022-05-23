@@ -32,6 +32,7 @@ class ScanConfig:
     do_not_cache_exit_codes: Optional[List[int]] = None
     removal_command: str = "rm"
     allowed_mimetypes: Optional[List[str]] = None
+    proxy: Optional[str] = None
 
 
 @attr.s(auto_attribs=True, frozen=True)
