@@ -47,7 +47,7 @@ class FileDownloader:
     MEDIA_THUMBNAIL_PREFIX = "_matrix/media/%s/thumbnail"
 
     def __init__(self, mcs: "MatrixContentScanner"):
-        self._base_url = mcs.config.scan.base_homeserver_url
+        self._base_url = mcs.config.download.base_homeserver_url
         self._agent = self._get_agent(mcs)
         self._well_known_cache: Dict[str, Optional[str]] = {}
 
@@ -65,7 +65,7 @@ class FileDownloader:
         if mcs.config.scan.proxy is None:
             return Agent(mcs.reactor)
 
-        proxy_url = urllib.parse.urlparse(mcs.config.scan.proxy.encode("utf-8"))
+        proxy_url = urllib.parse.urlparse(mcs.config.download.proxy.encode("utf-8"))
 
         endpoint = HostnameEndpoint(mcs.reactor, proxy_url.hostname, proxy_url.port)
         if proxy_url.scheme == b"https":

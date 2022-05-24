@@ -24,18 +24,22 @@ class WebConfig:
     port: int
 
 
-@attr.s(auto_attribs=True, frozen=True)
+@attr.s(auto_attribs=True, frozen=True, slots=True)
 class ScanConfig:
     script: str
     temp_directory: str
-    base_homeserver_url: Optional[str] = None
     do_not_cache_exit_codes: Optional[List[int]] = None
     removal_command: str = "rm"
     allowed_mimetypes: Optional[List[str]] = None
+
+
+@attr.s(auto_attribs=True, frozen=True, slots=True)
+class DownloadConfig:
+    base_homeserver_url: Optional[str] = None
     proxy: Optional[str] = None
 
 
-@attr.s(auto_attribs=True, frozen=True)
+@attr.s(auto_attribs=True, frozen=True, slots=True)
 class CryptoConfig:
     pickle_path: str
     pickle_key: str
@@ -60,6 +64,7 @@ class MatrixContentScannerConfig:
         self.web = WebConfig(**(config_dict.get("web") or {}))
         self.scan = ScanConfig(**(config_dict.get("scan") or {}))
         self.crypto = CryptoConfig(**(config_dict.get("crypto") or {}))
+        self.download = DownloadConfig(**(config_dict.get("download") or {}))
 
     def _check_required(self, config_dict: Dict[str, Any]) -> None:
         for setting in self.REQUIRED_SETTINGS:

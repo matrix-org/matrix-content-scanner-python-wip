@@ -5,10 +5,13 @@ web:
 scan:
     script: "./example.sh"
     temp_directory: "/tmp"
-    base_homeserver_url: "https://matrix.org"  # optional
     do_not_cache_exit_codes: [1, 2]  # optional
     removal_command: "srm"  # optional
-    allowed_mimetypes: ["image/jpeg"]  #optional
+    allowed_mimetypes: ["image/jpeg"]  # optional
+
+download:
+    base_homeserver_url: "https://matrix.org"  # optional
+    proxy: "http://10.0.0.1:3128"  # optional
 
 crypto:
     pickle_path: "./pickle"
