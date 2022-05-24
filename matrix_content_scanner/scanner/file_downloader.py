@@ -16,7 +16,6 @@ import urllib.parse
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from twisted.internet.endpoints import HostnameEndpoint, wrapClientTLS
-from twisted.internet.error import DNSLookupError
 from twisted.web.client import Agent, BrowserLikePolicyForHTTPS, ProxyAgent, readBody
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IAgent, IResponse
@@ -299,8 +298,8 @@ class FileDownloader:
     async def _get(self, url: str) -> Tuple[int, bytes, Headers]:
         try:
             resp: IResponse = await self._agent.request(b"GET", url.encode("ascii"))
-        except DNSLookupError as e:
-            logger.warning(e)
+        except Exception as e:
+            logger.error(e)
             raise ContentScannerRestError(
                 502,
                 ErrCodes.REQUEST_FAILED,
