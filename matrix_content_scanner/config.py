@@ -37,6 +37,7 @@ class ScanConfig:
 class DownloadConfig:
     base_homeserver_url: Optional[str] = None
     proxy: Optional[str] = None
+    additional_headers: Optional[Dict[str, str]] = None
 
 
 @attr.s(auto_attribs=True, frozen=True, slots=True)

@@ -12,6 +12,8 @@ scan:
 download:
     base_homeserver_url: "https://matrix.org"  # optional
     proxy: "http://10.0.0.1:3128"  # optional
+    additional_headers:  # optional
+        user-agent: "matrix-content-scanner"
 
 crypto:
     pickle_path: "./pickle"

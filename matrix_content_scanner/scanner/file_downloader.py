@@ -51,6 +51,11 @@ class FileDownloader:
         self._agent = self._get_agent(mcs)
         self._well_known_cache: Dict[str, Optional[str]] = {}
 
+        self._headers = Headers()
+        if mcs.config.download.additional_headers is not None:
+            for name, value in mcs.config.download.additional_headers.items():
+                self._headers.addRawHeader(name, value)
+
     def _get_agent(self, mcs: "MatrixContentScanner") -> IAgent:
         """Instantiates the Twisted agent to use to make requests.
 
@@ -62,7 +67,7 @@ class FileDownloader:
         Returns:
             The agent to use.
         """
-        if mcs.config.scan.proxy is None:
+        if mcs.config.download.proxy is None:
             return Agent(mcs.reactor)
 
         proxy_url = urllib.parse.urlparse(mcs.config.download.proxy.encode("utf-8"))
@@ -297,7 +302,11 @@ class FileDownloader:
 
     async def _get(self, url: str) -> Tuple[int, bytes, Headers]:
         try:
-            resp: IResponse = await self._agent.request(b"GET", url.encode("ascii"))
+            resp: IResponse = await self._agent.request(
+                b"GET",
+                url.encode("ascii"),
+                self._headers,
+            )
         except Exception as e:
             logger.error(e)
             raise ContentScannerRestError(
