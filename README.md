@@ -4,9 +4,54 @@ A web service for scanning media hosted by a Matrix media repository
 
 ## Installation
 
-TODO
+This project requires libolm development headers, as well as libmagic to be installed on
+the system. On Debian/Ubuntu:
 
-(requires libolm and libmagic)
+```commandline
+sudo apt install libolm-dev libmagic1
+```
+
+Then, preferably in a virtual environment, install the Matrix Content Scanner:
+
+```commandline
+pip install matrix-content-scanner
+```
+
+## Usage
+
+Copy and edit the [sample configuration file](https://github.com/matrix-org/matrix-content-scanner-python/blob/main/config.sample.yaml).
+Each key is documented in this file.
+
+Then run the content scanner (from within your virtual environment if one was created):
+
+```commandline
+python -m matrix_content_scanner.mcs -c CONFIG_FILE
+```
+
+Where `CONFIG_FILE` is the path to your configuration file.
+
+### Migrating from the [legacy Matrix Content Scanner](https://github.com/matrix-org/matrix-content-scanner)
+
+Because it uses the same APIs and Olm pickle format as the legacy Matrix Content Scanner,
+this project can be used as a drop-in replacement. The only change (apart from the
+deployment instructions) is the configuration format:
+
+* the `server` section is renamed `web`
+* `scan.tempDirectory` is renamed `scan.temp_directory`
+* `scan.baseUrl` is renamed `download.base_homeserver_url` (and becomes optional)
+* `scan.doNotCacheExitCodes` is renamed `scan.do_not_cache_exit_codes`
+* `scan.directDownload` is removed. Direct download always happens when `download.base_homeserver_url`
+  is absent from the configuration file, and setting a value for it will always cause files to be
+  downloaded from the server configured.
+* `proxy` is renamed `download.proxy`
+* `middleware.encryptedBody.pickleKey` is renamed `crypto.pickle_key`
+* `middleware.encryptedBody.picklePath` is renamed `crypto.pickle_path`
+* `acceptedMimeType` is renamed `allowed_mimetypes`
+* `requestHeader` is renamed `download.additional_headers` and turned into a dictionary.
+
+Note that the format of the cryptographic pickle file and key are compatible between this
+project and the legacy Matrix Content Scanner. If no file exist at that path one will be
+created automatically.
 
 ## Development
 
@@ -62,11 +107,9 @@ Synapse developers (assuming a Unix-like shell):
     git push origin tag v$version
     ```
 
- 7. If applicable:
-    Create a *release*, based on the tag you just pushed, on GitHub or GitLab.
+ 7. Create a *release*, based on the tag you just pushed, on GitHub or GitLab.
 
- 8. If applicable:
-    Create a source distribution and upload it to PyPI:
+ 8. Create a source distribution and upload it to PyPI:
     ```shell
     python -m build
     twine upload dist/matrix_content_scanner-$version*
