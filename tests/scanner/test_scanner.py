@@ -16,6 +16,7 @@ from typing import Dict, List, Optional
 from unittest.mock import Mock
 
 import aiounittest
+from twisted.web.http_headers import Headers
 
 from matrix_content_scanner.utils.constants import ErrCodes
 from matrix_content_scanner.utils.errors import ContentScannerRestError, FileDirtyError
@@ -33,6 +34,7 @@ class ScannerTestCase(aiounittest.AsyncTestCase):
         self.downloader_res = MediaDescription(
             content_type="image/png",
             content=SMALL_PNG,
+            response_headers=Headers(),
         )
 
         async def download_file(

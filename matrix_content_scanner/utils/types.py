@@ -14,12 +14,14 @@
 from typing import Any, Dict
 
 import attr
+from twisted.web.http_headers import Headers
 
 
 @attr.s(auto_attribs=True)
 class MediaDescription:
     content_type: str
     content: bytes
+    response_headers: Headers
 
 
 JsonDict = Dict[str, Any]

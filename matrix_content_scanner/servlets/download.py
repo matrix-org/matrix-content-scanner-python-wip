@@ -36,8 +36,7 @@ class DownloadServlet(BytesResource):
         # mypy doesn't recognise request.postpath but it does exist and is documented.
         media_path: bytes = b"/".join(request.postpath)  # type: ignore[attr-defined]
         media = await self._scanner.scan_file(media_path.decode("ascii"))
-        request.setHeader("Content-Type", media.content_type)
-        request.setHeader("Content-Length", str(len(media.content)))
+        request.responseHeaders = media.response_headers
         return 200, media.content
 
 
@@ -53,6 +52,5 @@ class DownloadEncryptedServlet(BytesResource):
         )
 
         media = await self._scanner.scan_file(media_path, metadata)
-        request.setHeader("Content-Type", media.content_type)
-        request.setHeader("Content-Length", str(len(media.content)))
+        request.responseHeaders = media.response_headers
         return 200, media.content

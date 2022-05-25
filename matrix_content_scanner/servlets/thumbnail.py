@@ -46,6 +46,5 @@ class ThumbnailServlet(BytesResource):
             media_path=media_path.decode("ascii"),
             thumbnail_params=thumbnail_params,
         )
-        request.setHeader("Content-Type", media.content_type)
-        request.setHeader("Content-Length", str(len(media.content)))
+        request.responseHeaders = media.response_headers
         return 200, media.content

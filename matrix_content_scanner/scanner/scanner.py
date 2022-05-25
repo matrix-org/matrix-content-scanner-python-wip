@@ -107,20 +107,15 @@ class Scanner:
             thumbnail_params=thumbnail_params,
         )
 
+        media_content = media.content
         if metadata is not None:
-            # If the file is encrypted, we need to decrypt it before we can scan it, but
-            # we also need to keep the encrypted body in memory in case we want to return
-            # it to the client.
-            clear_media = MediaDescription(
-                content=self._decrypt_file(media.content, metadata),
-                content_type="",
-            )
-        else:
-            clear_media = media
+            # If the file is encrypted, we need to decrypt it before we can scan it.
+            media_content = self._decrypt_file(media_content, metadata)
 
         try:
             self._check_mimetype(
-                media=clear_media,
+                media_content=media_content,
+                content_type_header=media.content_type,
                 encrypted=metadata is not None,
             )
         except FileDirtyError as e:
@@ -131,7 +126,7 @@ class Scanner:
             raise
 
         try:
-            file_path = self._write_file_to_disk(media_path, clear_media.content)
+            file_path = self._write_file_to_disk(media_path, media_content)
         except FileDirtyError as e:
             self._result_cache[cache_key] = CacheEntry(
                 result=False,
@@ -275,19 +270,24 @@ class Scanner:
             logger.info("Scan failed with exit code %d: %s", e.returncode, e.stderr)
             return e.returncode
 
-    def _check_mimetype(self, media: MediaDescription, encrypted: bool) -> None:
-        mimetype = magic.mimetype(media.content)
+    def _check_mimetype(
+        self,
+        media_content: bytes,
+        content_type_header: str,
+        encrypted: bool,
+    ) -> None:
+        mimetype = magic.mimetype(media_content)
 
         logger.info("File is %s", mimetype)
 
-        if encrypted is False and mimetype != media.content_type:
+        if encrypted is False and mimetype != content_type_header:
             # Error if the MIME type isn't matching the one that's expected, but only if
             # the file is not encrypted (because otherwise we'll always have
             # 'application/octet-stream' in the Content-Type header).
             logger.error(
                 "Mismatching MIME type (%s) and Content-Type header (%s)",
                 mimetype,
-                media.content_type,
+                content_type_header,
             )
             raise FileDirtyError("File type not supported")
 

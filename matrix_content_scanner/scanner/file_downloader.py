@@ -51,8 +51,9 @@ class FileDownloader:
         self._agent = self._get_agent(mcs)
         self._well_known_cache: Dict[str, Optional[str]] = {}
 
-        self._headers = Headers()
+        self._headers: Optional[Headers] = None
         if mcs.config.download.additional_headers is not None:
+            self._headers = Headers()
             for name, value in mcs.config.download.additional_headers.items():
                 self._headers.addRawHeader(name, value)
 
@@ -239,6 +240,7 @@ class FileDownloader:
         return MediaDescription(
             content_type=content_type_headers[0],
             content=body,
+            response_headers=headers,
         )
 
     async def _discover_via_well_known(self, domain: str) -> Optional[str]:
