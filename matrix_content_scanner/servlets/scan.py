@@ -42,7 +42,7 @@ class ScanServlet(JsonResource):
         except FileDirtyError as e:
             res = {"clean": False, "info": e.info}
         else:
-            res = {"clean": True}
+            res = {"clean": True, "info": "File is clean"}
 
         return 200, res
 
