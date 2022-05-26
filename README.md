@@ -1,6 +1,6 @@
 # Matrix Content Scanner
 
-A web service for scanning media hosted by a Matrix media repository
+A web service for scanning media hosted by a Matrix media repository.
 
 ## Installation
 
@@ -29,6 +29,11 @@ python -m matrix_content_scanner.mcs -c CONFIG_FILE
 ```
 
 Where `CONFIG_FILE` is the path to your configuration file.
+
+## API
+
+See [the API documentation](/docs/api.md) for information about how clients are expected
+to interact with the Matrix Content Scanner.
 
 ### Migrating from the [legacy Matrix Content Scanner](https://github.com/matrix-org/matrix-content-scanner)
 
