@@ -86,7 +86,7 @@ Request body:
 
 | Parameter        | Type          | Description                                                                                                                                                                                                                                                                                |
 |------------------|---------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `encrypted_body` | EncryptedBody | An Olm-encrypted version of the request body. See [this section for more information](#encrypted-post-body).                                                                                                                                                                               |
+| `encrypted_body` | EncryptedBody | An Olm-encrypted version of the request body. See [this section](#encrypted-post-body) for more information.                                                                                                                                                                               |
 | `file`           | EncryptedFile | The metadata (download MXC URL and decryption key) of an encrypted file. Follows the format of the `EncryptedFile` structure from the [Matrix specification](https://spec.matrix.org/v1.2/client-server-api/#extensions-to-mroommessage-msgtypes). Ignored if `encrypted_body` is present. |
 
 Example:
@@ -127,7 +127,8 @@ The request body for this route is the same as for
 ### `GET /_matrix/media_proxy/unstable/public_key`
 
 Responds with a base64 representation of the public key to use to generate the
-`encrypted_body` parameter of POST requests. See [this section for more information](#encrypted-post-body).
+`encrypted_body` parameter of POST requests. See [this section](#encrypted-post-body) for
+more information.
 
 Response format:
 
