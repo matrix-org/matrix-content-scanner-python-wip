@@ -1,6 +1,6 @@
 # Matrix Content Scanner
 
-A web service for scanning media hosted by a Matrix media repository.
+A web service for scanning media hosted on a Matrix media repository.
 
 ## Installation
 
