@@ -99,7 +99,7 @@ class _AsyncResource(Resource, metaclass=abc.ABCMeta):
         self._log(request, status)
         request.setResponseCode(status)
         request.setHeader("Content-Type", "application/json")
-        res = _to_json_bytes({"reason": reason, "info": info})
+        res = _to_json_bytes({"reason": str(reason), "info": info})
         request.write(res)
         request.finish()
 
@@ -228,11 +228,13 @@ def _metadata_from_body(body: str, crypto_handler: CryptoHandler) -> JsonDict:
     Raises:
         ContentScannerRestError(400) if the body isn't valid JSON or isn't a dictionary.
     """
+    # Try to parse the raw body.
     try:
         parsed_body = json.loads(body)
     except json.decoder.JSONDecodeError as e:
         raise ContentScannerRestError(400, ErrCode.MALFORMED_JSON, str(e))
 
+    # Every POST request body in the API implemented by the content scanner is a dict.
     if not isinstance(parsed_body, dict):
         raise ContentScannerRestError(
             400,
@@ -240,12 +242,13 @@ def _metadata_from_body(body: str, crypto_handler: CryptoHandler) -> JsonDict:
             "Body must be a dictionary",
         )
 
+    # Check if the metadata is encrypted, if not then the metadata is in clear text in
+    # the body so just return it.
     encrypted_body: Optional[JsonDict] = parsed_body.get("encrypted_body")
-
     if encrypted_body is None:
         return parsed_body
 
-    # If we have an encrypted payload in the body, decrypt it.
+    # If it is encrypted, decrypt it and return the decrypted version.
     return crypto_handler.decrypt_body(
         ciphertext=encrypted_body["ciphertext"],
         mac=encrypted_body["mac"],

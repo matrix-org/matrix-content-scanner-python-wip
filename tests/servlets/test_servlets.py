@@ -17,34 +17,52 @@ import unittest
 from olm.pk import PkEncryption
 
 from matrix_content_scanner.servlets import _metadata_from_body
-from matrix_content_scanner.utils.constants import ErrCodes
+from matrix_content_scanner.utils.constants import ErrCode
 from matrix_content_scanner.utils.errors import ContentScannerRestError
 from matrix_content_scanner.utils.types import JsonDict
 from tests.testutils import ENCRYPTED_FILE_METADATA, get_content_scanner
 
 
-class ServletUtilsTestCase(unittest.TestCase):
+class EncryptedFileMetadataTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.crypto_handler = get_content_scanner().crypto_handler
 
     def test_unencrypted(self) -> None:
+        """Tests that the _metadata_from_body function correctly returns non-encrypted
+        metadata.
+        """
         body_bytes = json.dumps(ENCRYPTED_FILE_METADATA)
         metadata = _metadata_from_body(body_bytes, self.crypto_handler)
         self.assertEqual(metadata, ENCRYPTED_FILE_METADATA)
 
     def test_encrypted(self) -> None:
+        """Tests that the _metadata_from_body function correctly decrypts Olm-encrypted
+        metadata and returns a decrypted version.
+        """
         encrypted_body = self._encrypt_body(ENCRYPTED_FILE_METADATA)
         body_bytes = json.dumps(encrypted_body)
         metadata = _metadata_from_body(body_bytes, self.crypto_handler)
         self.assertEqual(metadata, ENCRYPTED_FILE_METADATA)
 
     def test_bad_json(self) -> None:
+        """Tests that the _metadata_from_body function raises a REST error if the request
+        body is not valid JSON.
+        """
         with self.assertRaises(ContentScannerRestError) as cm:
             _metadata_from_body("foo", self.crypto_handler)
 
-        self.assertEqual(cm.exception.reason, ErrCodes.MALFORMED_JSON)
+        self.assertEqual(cm.exception.reason, ErrCode.MALFORMED_JSON)
 
     def _encrypt_body(self, content: JsonDict) -> JsonDict:
+        """Encrypts the provided dictionary with Olm's PkEncryption class.
+
+        Args:
+            content: The dictionary to encrypt.
+
+        Returns:
+            An encrypted version of the dictionary in the format that's expected in POST
+            requests.
+        """
         pke = PkEncryption(self.crypto_handler.public_key)
         plaintext = json.dumps(content)
         msg = pke.encrypt(plaintext)

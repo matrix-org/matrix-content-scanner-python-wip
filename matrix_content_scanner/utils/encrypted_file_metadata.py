@@ -66,7 +66,12 @@ def _validate(body: JsonDict) -> None:
     """
     validate(body, _encrypted_file_metadata_schema)
 
+    # We don't need to worry about triggering a KeyError/TypeError here because all of
+    # these keys are marked as required in the schema, so at this point we know they're
+    # here.
     key_ops = body["file"]["key"]["key_ops"]
+    # We need the key_ops list to at least include "encrypt" and "decrypt", but we can't
+    # check this with jsonschema, so we need to do it manually.
     if not set(key_ops).issuperset({"encrypt", "decrypt"}):
         raise ValueError('key_ops must contain at least "encrypt" and "decrypt"')
 
@@ -81,6 +86,7 @@ def validate_encrypted_file_metadata(body: JsonDict) -> None:
     Raises:
         ContentScannerRestError(400) if the validation failed.
     """
+    # Run the validation and turns any error coming out of it into a REST error.
     try:
         _validate(body)
     except ValidationError as e:

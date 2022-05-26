@@ -15,6 +15,12 @@ from enum import Enum
 
 
 class ErrCode(Enum):
+    def __str__(self) -> str:
+        return str(self.value)
+
+    def __repr__(self) -> str:
+        return str(self.value)
+
     # An unknown error happened.
     UNKNOWN = "M_UNKNOWN"
     # No route was found with the path and method provided in the request.

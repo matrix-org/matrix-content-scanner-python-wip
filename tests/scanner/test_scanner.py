@@ -18,11 +18,12 @@ from unittest.mock import Mock
 import aiounittest
 from twisted.web.http_headers import Headers
 
-from matrix_content_scanner.utils.constants import ErrCodes
+from matrix_content_scanner.utils.constants import ErrCode
 from matrix_content_scanner.utils.errors import ContentScannerRestError, FileDirtyError
 from matrix_content_scanner.utils.types import MediaDescription
 from tests.testutils import (
     ENCRYPTED_FILE_METADATA,
+    MEDIA_PATH,
     SMALL_PNG,
     SMALL_PNG_ENCRYPTED,
     get_content_scanner,
@@ -41,52 +42,89 @@ class ScannerTestCase(aiounittest.AsyncTestCase):
             media_path: str,
             thumbnail_params: Optional[Dict[str, List[str]]] = None,
         ) -> MediaDescription:
+            """Mock for the file downloader's `download_file` method."""
             return self.downloader_res
 
         self.downloader_mock = Mock(side_effect=download_file)
 
+        # Mock download_file so we don't actually try to download files.
         mcs = get_content_scanner()
         mcs.file_downloader.download_file = self.downloader_mock  # type: ignore[assignment]
         self.scanner = mcs.scanner
 
     async def test_scan(self) -> None:
-        media = await self.scanner.scan_file("foo/bar")
+        """Tests that we can scan files and that the scanner returns the media scanned if
+        the scan was successful.
+        """
+        media = await self.scanner.scan_file(MEDIA_PATH)
         self.assertEqual(media.content, SMALL_PNG)
 
     async def test_scan_dirty(self) -> None:
+        """Tests that the scanner raises a FileDirtyError if the scan fails."""
         self.scanner._script = "false"
         with self.assertRaises(FileDirtyError):
-            await self.scanner.scan_file("foo/bar")
+            await self.scanner.scan_file(MEDIA_PATH)
 
     async def test_encrypted_file(self) -> None:
+        """Tests that the scanner can decrypt and scan encrypted files, and that if the
+        scan is successful it returns the encrypted file and not the decrypted version.
+        """
         self._setup_encrypted()
 
-        media = await self.scanner.scan_file("foo/bar", ENCRYPTED_FILE_METADATA)
+        media = await self.scanner.scan_file(MEDIA_PATH, ENCRYPTED_FILE_METADATA)
         self.assertEqual(media.content, SMALL_PNG_ENCRYPTED)
 
     async def test_cache(self) -> None:
-        await self.scanner.scan_file("foo/bar")
+        """Tests that scan results are cached."""
+        # Scan the file a first time, and check that the downloader has been called.
+        await self.scanner.scan_file(MEDIA_PATH)
         self.assertEqual(self.downloader_mock.call_count, 1)
 
-        media = await self.scanner.scan_file("foo/bar")
+        # Scan the file a second time, and check that the downloader has not been called
+        # this time.
+        media = await self.scanner.scan_file(MEDIA_PATH)
         self.assertEqual(self.downloader_mock.call_count, 1)
         self.assertEqual(media.content, SMALL_PNG)
 
     async def test_cache_encrypted(self) -> None:
+        """Tests that scan results for encrypted files are cached, and that the cached
+        file is the encrypted version, not the decrypted one."""
         self._setup_encrypted()
 
-        await self.scanner.scan_file("foo/bar", ENCRYPTED_FILE_METADATA)
+        # Scan the file a first time, and check that the downloader has been called.
+        await self.scanner.scan_file(MEDIA_PATH, ENCRYPTED_FILE_METADATA)
         self.assertEqual(self.downloader_mock.call_count, 1)
 
-        media = await self.scanner.scan_file("foo/bar", ENCRYPTED_FILE_METADATA)
+        # Scan the file a second time, and check that the downloader has not been called
+        # this time, and that the media returned is the encrypted copy.
+        media = await self.scanner.scan_file(MEDIA_PATH, ENCRYPTED_FILE_METADATA)
         self.assertEqual(self.downloader_mock.call_count, 1)
         self.assertEqual(media.content, SMALL_PNG_ENCRYPTED)
 
     async def test_cache_download_thumbnail(self) -> None:
-        await self.scanner.scan_file("foo/bar")
+        """Tests that cached results for full file downloads are not used for thumbnails."""
+        await self.scanner.scan_file(MEDIA_PATH)
         self.assertEqual(self.downloader_mock.call_count, 1)
 
-        await self.scanner.scan_file("foo/bar", thumbnail_params={"width": ["50"]})
+        await self.scanner.scan_file(MEDIA_PATH, thumbnail_params={"width": ["50"]})
+        self.assertEqual(self.downloader_mock.call_count, 2)
+
+    async def test_cache_thumbnail_params(self) -> None:
+        """Tests that cached results for thumbnails are only used if the generation
+        parameters are the same.
+        """
+        # Scan a thumbnail and check that the downloader was called.
+        await self.scanner.scan_file(MEDIA_PATH, thumbnail_params={"width": ["50"]})
+        self.assertEqual(self.downloader_mock.call_count, 1)
+
+        # Scan the thumbnail again and check that the cache result was used (since the
+        # downloader was not called)
+        await self.scanner.scan_file(MEDIA_PATH, thumbnail_params={"width": ["50"]})
+        self.assertEqual(self.downloader_mock.call_count, 1)
+
+        # Scan a different thumbnail of the same media (with different parameters) and
+        # check that the downloader was called.
+        await self.scanner.scan_file(MEDIA_PATH, thumbnail_params={"height": ["50"]})
         self.assertEqual(self.downloader_mock.call_count, 2)
 
     async def test_different_encryption_key(self) -> None:
@@ -97,35 +135,65 @@ class ScannerTestCase(aiounittest.AsyncTestCase):
         """
         self._setup_encrypted()
 
-        await self.scanner.scan_file("foo/bar", ENCRYPTED_FILE_METADATA)
+        # Scan the file and check that the downloader was called.
+        await self.scanner.scan_file(MEDIA_PATH, ENCRYPTED_FILE_METADATA)
         self.assertEqual(self.downloader_mock.call_count, 1)
 
+        # Copy the file metadata and change the key.
         modified_metadata = copy.deepcopy(ENCRYPTED_FILE_METADATA)
         modified_metadata["file"]["key"]["k"] = "somethingelse"
 
+        # This causes the scanner to not be able to decrypt the file.
         with self.assertRaises(ContentScannerRestError) as cm:
-            await self.scanner.scan_file("foo/bar", modified_metadata)
+            await self.scanner.scan_file(MEDIA_PATH, modified_metadata)
 
         self.assertEqual(cm.exception.http_status, 400)
-        self.assertEqual(cm.exception.reason, ErrCodes.FAILED_TO_DECRYPT)
+        self.assertEqual(cm.exception.reason, ErrCode.FAILED_TO_DECRYPT)
 
+        # But it also causes it to be downloaded again because its metadata have changed.
         self.assertEqual(self.downloader_mock.call_count, 2)
 
     async def test_mimetype(self) -> None:
+        """Tests that, if there's an allow list for MIME types and the file's MIME type
+        isn't in it, the file's scan fails.
+        """
+        # Set an allow list that only allows JPEG files.
         self.scanner._allowed_mimetypes = ["image/jpeg"]
 
+        # Check that the scan fails since the file is a PNG.
         with self.assertRaises(FileDirtyError):
-            await self.scanner.scan_file("foo/bar")
+            await self.scanner.scan_file(MEDIA_PATH)
 
     async def test_mimetype_encrypted(self) -> None:
+        """Tests that the file's MIME type is correctly detected and compared with the
+        allow list (if set), even if it's encrypted.
+        """
         self._setup_encrypted()
 
+        # Set an allow list that only allows JPEG files.
         self.scanner._allowed_mimetypes = ["image/jpeg"]
 
+        # Check that the scan fails since the file is a PNG.
         with self.assertRaises(FileDirtyError):
-            await self.scanner.scan_file("foo/bar", ENCRYPTED_FILE_METADATA)
+            await self.scanner.scan_file(MEDIA_PATH, ENCRYPTED_FILE_METADATA)
+
+    async def test_mimetype_content_type_mismatch(self) -> None:
+        """Tests that a scan fails if the detected MIME type does not match the value of
+        the Content-Type header sent by the homeserver.
+        """
+        # Set up the file description to make it look as if the homeserver tried to tell
+        # us the file is a JPEG (even though it's actually a PNG).
+        self.downloader_res.content_type = "image/jpeg"
+
+        # Check that the scan fails since the file's detected MIME type doesn't match the
+        # value of the Content-Type header.
+        with self.assertRaises(FileDirtyError):
+            await self.scanner.scan_file(MEDIA_PATH)
 
     async def test_dont_cache_exit_codes(self) -> None:
+        """Tests that if the configuration specifies exit codes to ignore when running
+        the scanning script, we don't cache them.
+        """
         self.scanner._exit_codes_to_ignore = [5]
 
         # It's tricky to give a value to `scanner._script` that makes `_run_scan` return 5
@@ -135,7 +203,7 @@ class ScannerTestCase(aiounittest.AsyncTestCase):
 
         # Scan the file, we'll check later that it wasn't cached.
         with self.assertRaises(FileDirtyError):
-            await self.scanner.scan_file("foo/bar")
+            await self.scanner.scan_file(MEDIA_PATH)
 
         self.assertEqual(self.downloader_mock.call_count, 1)
 
@@ -144,20 +212,31 @@ class ScannerTestCase(aiounittest.AsyncTestCase):
 
         # Scan the file again to check that the file wasn't cached.
         with self.assertRaises(FileDirtyError):
-            await self.scanner.scan_file("foo/bar")
+            await self.scanner.scan_file(MEDIA_PATH)
 
         self.assertEqual(self.downloader_mock.call_count, 2)
 
         # The file should be cached now.
         with self.assertRaises(FileDirtyError):
-            await self.scanner.scan_file("foo/bar")
+            await self.scanner.scan_file(MEDIA_PATH)
 
         self.assertEqual(self.downloader_mock.call_count, 2)
 
     async def test_outside_temp_dir(self) -> None:
+        """Tests that a scan is failed if the media path is formed in a way that would
+        cause the scanner to write outside of the configured directory.
+        """
         with self.assertRaises(FileDirtyError):
             await self.scanner.scan_file("../bar")
 
+    async def test_invalid_media_path(self) -> None:
+        """Tests that a scan fails if the media path is invalid."""
+        with self.assertRaises(FileDirtyError):
+            await self.scanner.scan_file(MEDIA_PATH + "/baz")
+
     def _setup_encrypted(self) -> None:
+        """Sets up class properties to make the downloader return an encrypted file
+        instead of a plain text one.
+        """
         self.downloader_res.content_type = "application/octet-stream"
         self.downloader_res.content = SMALL_PNG_ENCRYPTED

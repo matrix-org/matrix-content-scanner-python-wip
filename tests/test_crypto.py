@@ -24,15 +24,20 @@ class CryptoHandlerTestCase(unittest.TestCase):
         self.crypto_handler = get_content_scanner().crypto_handler
 
     def test_decrypt(self) -> None:
+        """Tests that an Olm-encrypted payload is successfully decrypted."""
         payload = {"foo": "bar"}
 
+        # Encrypt the payload with PkEncryption.
         pke = PkEncryption(self.crypto_handler.public_key)
         encrypted = pke.encrypt(json.dumps(payload))
 
+        # Decrypt the payload with the crypto handler.
         decrypted = self.crypto_handler.decrypt_body(
             encrypted.ciphertext,
             encrypted.mac,
             encrypted.ephemeral_key,
         )
 
+        # Check that the decrypted payload is the same as the original one before
+        # encryption.
         self.assertEqual(decrypted, payload)

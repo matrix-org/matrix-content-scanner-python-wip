@@ -76,7 +76,8 @@ class Scanner:
 
         Raises:
             ContentScannerRestError if the file could not be downloaded.
-            FileDirtyError if the result of the scan said that the file is dirty.
+            FileDirtyError if the result of the scan said that the file is dirty, or if
+                the media path is malformed.
         """
         # Compute the cache key for the media.
         cache_key = self._get_cache_key_for_file(media_path, metadata, thumbnail_params)
@@ -101,6 +102,15 @@ class Scanner:
                     "Result cache is confused: missing media but result is True.",
                 )
 
+        # Check if the media path is valid and only contains one slash (otherwise we'll
+        # have issues parsing it further down the line).
+        if media_path.count("/") != 1:
+            self._result_cache[cache_key] = CacheEntry(
+                result=False,
+                info="Malformed media ID",
+            )
+            raise FileDirtyError("Malformed media ID")
+
         # Download the file, and decrypt it if necessary.
         media = await self._file_downloader.download_file(
             media_path=media_path,
@@ -112,6 +122,8 @@ class Scanner:
             # If the file is encrypted, we need to decrypt it before we can scan it.
             media_content = self._decrypt_file(media_content, metadata)
 
+        # Check the file's MIME type to see if it's allowed and, if the file is not
+        # encrypted, if it matches the Content-Type header the homeserver sent us.
         try:
             self._check_mimetype(
                 media_content=media_content,
@@ -125,15 +137,19 @@ class Scanner:
             )
             raise
 
+        # Write the file to disk.
         try:
             file_path = self._write_file_to_disk(media_path, media_content)
         except FileDirtyError as e:
+            # A FileDirtyError will be raised if the media path is built in a way that
+            # can lead to writing outside of the configured directory.
             self._result_cache[cache_key] = CacheEntry(
                 result=False,
                 info=e.info,
             )
             raise
 
+        # Scan the file and see if the result is positive or negative.
         exit_code = self._run_scan(file_path)
         result = exit_code == 0
 
@@ -144,6 +160,9 @@ class Scanner:
         ):
             logger.info("Caching result %s", result)
 
+            # Only cache the media if the scan is successful, because this means we might
+            # need to show it to the user again. If the test fails, don't store it to save
+            # memory.
             self._result_cache[cache_key] = CacheEntry(
                 result=result,
                 media=media if result is True else None,
@@ -214,6 +233,7 @@ class Scanner:
         hash = metadata["file"]["hashes"]["sha256"]
         iv = metadata["file"]["iv"]
 
+        # Decrypt the file.
         try:
             return decrypt_attachment(body, key, hash, iv)
         except DecryptionError as e:
@@ -299,13 +319,12 @@ class Scanner:
             FileDirtyError if one of the checks fail.
         """
         mimetype = magic.mimetype(media_content)
-
         logger.info("MIME type for file is %s", mimetype)
 
+        # Check if the MIME type is matching the one that's expected, but only if the file
+        # is not encrypted (because otherwise we'll always have 'application/octet-stream'
+        # in the Content-Type header regardless of the actual MIME type of the file).
         if encrypted is False and mimetype != content_type_header:
-            # Error if the MIME type isn't matching the one that's expected, but only if
-            # the file is not encrypted (because otherwise we'll always have
-            # 'application/octet-stream' in the Content-Type header).
             logger.error(
                 "Mismatching MIME type (%s) and Content-Type header (%s)",
                 mimetype,
@@ -313,6 +332,8 @@ class Scanner:
             )
             raise FileDirtyError("File type not supported")
 
+        # If there's an allow list for MIME types, check that the MIME type that's been
+        # detected for this file is in it.
         if (
             self._allowed_mimetypes is not None
             and mimetype not in self._allowed_mimetypes

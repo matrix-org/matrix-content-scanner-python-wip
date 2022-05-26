@@ -108,11 +108,15 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # Load the configuration file.
     try:
         cfg = MatrixContentScannerConfig(yaml.safe_load(args.c))
     except (ConfigError, ScannerError) as e:
+        # If there's an error reading the file, print it and exit without raising so we
+        # don't confuse/annoy the user with an unnecessary stack trace.
         logger.error("Failed to read configuration file: %s", e)
         sys.exit(1)
 
+    # Start the content scanner.
     mcs = MatrixContentScanner(cfg)
     mcs.start()

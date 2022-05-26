@@ -26,4 +26,5 @@ class MediaDescription:
     response_headers: Headers
 
 
+# A JSON object/dictionary.
 JsonDict = Dict[str, Any]

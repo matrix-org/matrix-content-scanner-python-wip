@@ -20,12 +20,17 @@ from matrix_content_scanner.config import MatrixContentScannerConfig
 from matrix_content_scanner.mcs import MatrixContentScanner
 from matrix_content_scanner.utils.types import JsonDict
 
+# The media path to use in tests.
+MEDIA_PATH = "foo/bar"
+
+# A small, unencrypted PNG.
 SMALL_PNG = unhexlify(
     b"89504e470d0a1a0a0000000d4948445200000001000000010806"
     b"0000001f15c4890000000a49444154789c63000100000500010d"
     b"0a2db40000000049454e44ae426082"
 )
 
+# A small, encrypted PNG.
 SMALL_PNG_ENCRYPTED = unhexlify(
     b"9fd28dd7a1d845a04948f13af104e39402c888f7b601bce313ad"
     b"bf3e2423f67d93d5e304efc147d46df511abacbb8ae7e2e8156c"
@@ -51,6 +56,7 @@ SMALL_PNG_ENCRYPTED = unhexlify(
     b"4a"
 )
 
+# The metadata necessary to download and decrypt SMALL_PNG_ENCRYPTED
 ENCRYPTED_FILE_METADATA: JsonDict = {
     "file": {
         "v": "v2",
@@ -63,32 +69,53 @@ ENCRYPTED_FILE_METADATA: JsonDict = {
         },
         "iv": "rJqtSdi3F/EAAAAAAAAAAA",
         "hashes": {"sha256": "NYvGRRQGfyWpXSUpba+ozSbehFP6kw5ZDg0xMppyX8c"},
-        "url": "mxc://foo/bar",
+        "url": "mxc://" + MEDIA_PATH,
     }
 }
 
 
 def get_base_media_headers() -> Headers:
+    """Get the base headers necessary to react to a download request for SMALL_PNG.
+
+    Returns:
+        The headers to pass onto the file downloader.
+    """
     media_headers = Headers()
     media_headers.setRawHeaders("content-type", ["image/png"])
     return media_headers
 
 
 def get_content_scanner(config: Optional[JsonDict] = None) -> MatrixContentScanner:
-    if config is None:
-        config = {
-            "scan": {
-                "script": "true",
-                "temp_directory": "temp",
-            },
-            "web": {
-                "host": "127.0.0.1",
-                "port": 8080,
-            },
-            "crypto": {
-                "pickle_path": "mcs_pickle.txt",
-                "pickle_key": "foo",
-            },
-        }
+    """Instantiates an instance of the content scanner.
 
-    return MatrixContentScanner(MatrixContentScannerConfig(config))
+    Args:
+        config: The optional provided config.
+    """
+    # We define the default configuration here rather than as a constant outside of a
+    # function because otherwise a test that sets its own config would have side effects
+    # on the config used for other tests.
+    default_config = {
+        "scan": {
+            "script": "true",
+            "temp_directory": "temp",
+        },
+        "web": {
+            "host": "127.0.0.1",
+            "port": 8080,
+        },
+        "crypto": {
+            "pickle_path": "mcs_pickle.txt",
+            "pickle_key": "foo",
+        },
+    }
+
+    if config is None:
+        config = {}
+
+    # Update the configuration provided with some default settings.
+    # Note that `update` does not update nested dictionaries (only the top level), so
+    # e.g. if a configuration with a `scan` section is provided it will need to include
+    # all required settings in that section.
+    default_config.update(config)
+
+    return MatrixContentScanner(MatrixContentScannerConfig(default_config))
