@@ -23,15 +23,15 @@ Example:
 The error codes used by the Matrix Content Scanner are described below, alongside the HTTP
 status code of the response for each scenario:
 
-| Status Code | Reason                        | Description                                                                                                                         |
-|-------------|-------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
-| 400         | `MCS_MALFORMED_JSON`          | The request body contains malformed JSON.                                                                                           |
-| 400         | `MCS_MEDIA_FAILED_TO_DECRYPT` | The server failed to decrypt the encrypted media downloaded from the media repo.                                                    |
-| 404         | `M_NOT_FOUND`                 | No route could be found at the given path.                                                                                          |
-| 403         | `MCS_MEDIA_NOT_CLEAN`         | The server scanned the downloaded media but the antivirus script returned a non-zero exit code.                                     |
-| 403         | `MCS_BAD_DECRYPTION`          | The provided `encrypted_body` could not be decrypted. The client should request the public key of the server and then retry (once). |
-| 500         | `M_UNKNOWN`                   | The server experienced an unexpected error.                                                                                         |
-| 502         | `MCS_MEDIA_REQUEST_FAILED`    | The server failed to request media from the media repo.                                                                             |
+| Status Code | Reason                        | Description                                                                                                                                                                       |
+|-------------|-------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 400         | `MCS_MALFORMED_JSON`          | The request body contains malformed JSON.                                                                                                                                         |
+| 400         | `MCS_MEDIA_FAILED_TO_DECRYPT` | The server failed to decrypt the encrypted media downloaded from the media repo.                                                                                                  |
+| 404         | `M_NOT_FOUND`                 | No route could be found at the given path.                                                                                                                                        |
+| 403         | `MCS_MEDIA_NOT_CLEAN`         | The server scanned the downloaded media but the antivirus script returned a non-zero exit code.                                                                                   |
+| 403         | `MCS_BAD_DECRYPTION`          | The provided `encrypted_body` could not be decrypted, or the encrypted file could not be decrypted. The client should request the public key of the server and then retry (once). |
+| 500         | `M_UNKNOWN`                   | The server experienced an unexpected error.                                                                                                                                       |
+| 502         | `MCS_MEDIA_REQUEST_FAILED`    | The server failed to request media from the media repo.                                                                                                                           |
 
 
 ## Routes
@@ -171,8 +171,10 @@ Example (generated using the body and public key from the previous examples):
 
 ```json
 {
-  "ciphertext": "tED6iNpKcZti+HMZ6t1M+ZlE27IbvF9nojz59dg3jtJHv/9wtH6KiYyaZsVvCNzuwWCjdcxA4PMevZuWnVIEWHArCKdcFJeAvzxzlVtFvlgM5PIiTNtkh8sXIaC7RP5+3s0/aQs9PhuhlJ5nGlS86BZJ56dDwQWS5DO/WPqsTko9lz6//XtZ8ko417vybz81NTNpoADRc8XRntsI1+rmdKkXJtuXTA3d46CCAhLvoJLZlk7xb7IGHADk3eYQ9WTaKQ76/PW1dDo5xQGyXOr+lJByisjkoz4C8i4wRYXnks+d3q6kIndGZgO8s/H7/kfYC052IAlAk3LmYavXaNwXJtnWUCCakTHME154yup8DtmsyuZkC3p3KhSsKAeoxmYvsSf0+p0MinOWB4BgeWwaBaKDKTHbaUKwQzdbZrBXKP+QBdmM9PUrmsTPR2RmWRsPCC3dcmz4rakCZB/Xvwg++xDzpxi3+iJxJ011g1Dfp4sd44U6LJDVZafIoPu7esChYD4o+x4tP4airHueLGpP0rQxPuDZRvklwCRZ5xtzr47fINel2IGrTQEPyNES+lASGr2xeWwBJXBe47OkM0rXZn1HVM6iK3g3HfUT6pFhdI/52ztUf+gOhOhRvTpP079Je9INLApXSu793EQGJpH+ms3ymJ3mfBhEYVVnj8zbczo",
-  "mac": "nipjbUCnIEw",
-  "ephemeral": "fk2xOTmttnFDTAORxVQTtIlbsu7O01Oe52+umaOjIiE"
+    "encrypted_body": {
+        "ciphertext": "tED6iNpKcZti+HMZ6t1M+ZlE27IbvF9nojz59dg3jtJHv/9wtH6KiYyaZsVvCNzuwWCjdcxA4PMevZuWnVIEWHArCKdcFJeAvzxzlVtFvlgM5PIiTNtkh8sXIaC7RP5+3s0/aQs9PhuhlJ5nGlS86BZJ56dDwQWS5DO/WPqsTko9lz6//XtZ8ko417vybz81NTNpoADRc8XRntsI1+rmdKkXJtuXTA3d46CCAhLvoJLZlk7xb7IGHADk3eYQ9WTaKQ76/PW1dDo5xQGyXOr+lJByisjkoz4C8i4wRYXnks+d3q6kIndGZgO8s/H7/kfYC052IAlAk3LmYavXaNwXJtnWUCCakTHME154yup8DtmsyuZkC3p3KhSsKAeoxmYvsSf0+p0MinOWB4BgeWwaBaKDKTHbaUKwQzdbZrBXKP+QBdmM9PUrmsTPR2RmWRsPCC3dcmz4rakCZB/Xvwg++xDzpxi3+iJxJ011g1Dfp4sd44U6LJDVZafIoPu7esChYD4o+x4tP4airHueLGpP0rQxPuDZRvklwCRZ5xtzr47fINel2IGrTQEPyNES+lASGr2xeWwBJXBe47OkM0rXZn1HVM6iK3g3HfUT6pFhdI/52ztUf+gOhOhRvTpP079Je9INLApXSu793EQGJpH+ms3ymJ3mfBhEYVVnj8zbczo",
+        "mac": "nipjbUCnIEw",
+        "ephemeral": "fk2xOTmttnFDTAORxVQTtIlbsu7O01Oe52+umaOjIiE"
+    }
 }
 ```
