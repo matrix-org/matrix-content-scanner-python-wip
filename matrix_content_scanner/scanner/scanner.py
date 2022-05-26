@@ -23,7 +23,7 @@ from mautrix.errors import DecryptionError
 from mautrix.util import magic
 
 from matrix_content_scanner import logging
-from matrix_content_scanner.utils.constants import ErrCodes
+from matrix_content_scanner.utils.constants import ErrCode
 from matrix_content_scanner.utils.errors import ContentScannerRestError, FileDirtyError
 from matrix_content_scanner.utils.types import JsonDict, MediaDescription
 
@@ -202,6 +202,9 @@ class Scanner:
 
         Returns:
             The decrypted content of the file.
+
+        Raises:
+            ContentScannerRestError(400) if the decryption failed.
         """
         logger.info("File is encrypted, decrypting")
 
@@ -216,7 +219,7 @@ class Scanner:
         except DecryptionError as e:
             raise ContentScannerRestError(
                 http_status=400,
-                reason=ErrCodes.FAILED_TO_DECRYPT,
+                reason=ErrCode.FAILED_TO_DECRYPT,
                 info=e.message,
             )
 
@@ -233,12 +236,12 @@ class Scanner:
 
         Raises:
             FileDirtyError if the media path is malformed in a way that would cause the
-                file to be written outside of the configured directory.
+                file to be written outside the configured directory.
         """
         # Figure out the full absolute path for this file. Given _store_directory is
-        # already an absolute path we likely already have an absolute path, but we want to
-        # make sure we don't have any '..' etc in the full path, to make sure we don't try
-        # to write outside the directory.
+        # already an absolute path using os.path.join is likely good enough, but we want
+        # to make sure there isn't any '..' etc in the full path, to make sure we don't
+        # try to write outside the directory.
         full_path = os.path.abspath(os.path.join(self._store_directory, media_path))
         if not full_path.startswith(self._store_directory):
             raise FileDirtyError("Malformed media ID")
@@ -276,9 +279,28 @@ class Scanner:
         content_type_header: str,
         encrypted: bool,
     ) -> None:
+        """Reads the MIME type of the provided bytes, and checks that:
+
+        * it matches with the Content-Type header that was received when downloading this
+            file (if the media isn't encrypted, since otherwise the Content-Type header
+            is always 'application/octet-stream')
+        * files with this MIME type are allowed (if an allow list is provided in the
+            configuration)
+
+        Args:
+            media_content: The file's content. If the file is encrypted, this is its
+                decrypted content.
+            content_type_header: The value of the Content-Type header received when
+                downloading the file.
+            encrypted: Whether the file was encrypted (in which case we don't want to
+                check that its MIME type matches with the Content-Type header).
+
+        Raises:
+            FileDirtyError if one of the checks fail.
+        """
         mimetype = magic.mimetype(media_content)
 
-        logger.info("File is %s", mimetype)
+        logger.info("MIME type for file is %s", mimetype)
 
         if encrypted is False and mimetype != content_type_header:
             # Error if the MIME type isn't matching the one that's expected, but only if

@@ -13,11 +13,11 @@
 #  limitations under the License.
 from jsonschema import ValidationError, validate
 
-from matrix_content_scanner.utils.constants import ErrCodes
+from matrix_content_scanner.utils.constants import ErrCode
 from matrix_content_scanner.utils.errors import ContentScannerRestError
 from matrix_content_scanner.utils.types import JsonDict
 
-# This is a subset of the content of a m.room.message event that includes a file, with
+# This is a subset of the content of an m.room.message event that includes a file, with
 # only the info that we need to locate and decrypt the file.
 _encrypted_file_metadata_schema = {
     "type": "object",
@@ -73,17 +73,17 @@ def _validate(body: JsonDict) -> None:
 
 def validate_encrypted_file_metadata(body: JsonDict) -> None:
     """Validates the schema of the given dictionary, and turns any validation error
-    raised into a Matrix client error.
+    raised into a client error.
 
     Args:
         body: The body to validate.
 
     Raises:
-        ContentScannerRestError if the validation failed.
+        ContentScannerRestError(400) if the validation failed.
     """
     try:
         _validate(body)
     except ValidationError as e:
-        raise ContentScannerRestError(400, ErrCodes.MALFORMED_JSON, e.message)
+        raise ContentScannerRestError(400, ErrCode.MALFORMED_JSON, e.message)
     except ValueError as e:
-        raise ContentScannerRestError(400, ErrCodes.MALFORMED_JSON, str(e))
+        raise ContentScannerRestError(400, ErrCode.MALFORMED_JSON, str(e))

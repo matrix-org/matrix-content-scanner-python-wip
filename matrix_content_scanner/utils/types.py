@@ -19,6 +19,8 @@ from twisted.web.http_headers import Headers
 
 @attr.s(auto_attribs=True)
 class MediaDescription:
+    """A description of a media."""
+
     content_type: str
     content: bytes
     response_headers: Headers

@@ -11,16 +11,13 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-from matrix_content_scanner.utils.constants import ErrCodes
+from matrix_content_scanner.utils.constants import ErrCode
 
 
 class ContentScannerRestError(Exception):
-    """
-    Handled by the jsonwrap wrapper. Any servlets that don't use this
-    wrapper should catch this exception themselves.
-    """
+    """An error that is converted into an error response by the REST resource."""
 
-    def __init__(self, http_status: int, reason: str, info: str) -> None:
+    def __init__(self, http_status: int, reason: ErrCode, info: str) -> None:
         super(Exception, self).__init__(info)
         self.http_status = http_status
         self.reason = reason
@@ -28,17 +25,23 @@ class ContentScannerRestError(Exception):
 
 
 class FileDirtyError(ContentScannerRestError):
+    """An error indicating that the file being scanned is dirty."""
+
     def __init__(self, info: str = "***VIRUS DETECTED***") -> None:
         super(FileDirtyError, self).__init__(
             http_status=403,
-            reason=ErrCodes.NOT_CLEAN,
+            reason=ErrCode.NOT_CLEAN,
             info=info,
         )
 
 
 class ConfigError(Exception):
+    """An error indicating an issue with the configuration file."""
+
     pass
 
 
 class WellKnownDiscoveryError(Exception):
+    """An error indicating a failure when attempting a .well-known discovery."""
+
     pass

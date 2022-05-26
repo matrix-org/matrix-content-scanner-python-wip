@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 
 
 class ScanServlet(JsonResource):
+    """Handles GET requests to .../scan/serverName/mediaId"""
+
     isLeaf = True
 
     def __init__(self, content_scanner: "MatrixContentScanner") -> None:
@@ -48,6 +50,8 @@ class ScanServlet(JsonResource):
 
 
 class ScanEncryptedServlet(JsonResource):
+    """Handles POST requests to .../download_encrypted"""
+
     def __init__(self, content_scanner: "MatrixContentScanner") -> None:
         super().__init__()
         self._scanner = content_scanner.scanner
@@ -60,9 +64,9 @@ class ScanEncryptedServlet(JsonResource):
 
         try:
             await self._scanner.scan_file(media_path, metadata)
-        except FileDirtyError:
-            clean = False
+        except FileDirtyError as e:
+            res = {"clean": False, "info": e.info}
         else:
-            clean = True
+            res = {"clean": True, "info": "File is clean"}
 
-        return 200, {"clean": clean}
+        return 200, res

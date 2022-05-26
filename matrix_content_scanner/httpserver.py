@@ -41,6 +41,11 @@ class HTTPServer:
         self._site = Site(root)
 
     def _build_resource_tree(self) -> Resource:
+        """Creates a resource tree with all the servlets.
+
+        Returns:
+            The root resource with the servlets attached to it.
+        """
         root = Resource()
         matrix = Resource()
         media_proxy = Resource()
@@ -60,11 +65,12 @@ class HTTPServer:
         return root
 
     def start(self) -> None:
+        """Starts the HTTP server."""
         logger.info("Starting listener on %s:%d", self._bind_address, self._bind_port)
 
         self._mcs.reactor.listenTCP(
             interface=self._bind_address,
             port=self._bind_port,
             factory=self._site,
-            backlog=50,  # taken from PosixReactorBase.listenTCP
+            backlog=50,
         )

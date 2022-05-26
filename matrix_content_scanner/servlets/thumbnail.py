@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
 
 class ThumbnailServlet(BytesResource):
+    """Handles GET requests to .../thumbnail/serverName/mediaId"""
+
     isLeaf = True
 
     def __init__(self, content_scanner: "MatrixContentScanner"):

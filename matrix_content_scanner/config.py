@@ -14,18 +14,74 @@
 from typing import Any, Dict, List, Optional
 
 import attr
+from jsonschema import ValidationError, validate
 
 from matrix_content_scanner.utils.errors import ConfigError
+
+# Schema to validate the raw configuration dictionary against.
+_config_schema = {
+    "type": "object",
+    "required": ["web", "scan", "crypto"],
+    "additionalProperties": False,
+    "properties": {
+        "web": {
+            "type": "object",
+            "required": ["host", "port"],
+            "additionalProperties": False,
+            "properties": {
+                "host": {"type": "string"},
+                "port": {"type": "number"},
+            },
+        },
+        "scan": {
+            "type": "object",
+            "required": ["script", "temp_directory"],
+            "additionalProperties": False,
+            "properties": {
+                "script": {"type": "string"},
+                "temp_directory": {"type": "string"},
+                "do_not_cache_exit_codes": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                },
+                "removal_command": {"type": "string"},
+                "allowed_mimetypes": {"type": "array", "items": {"type": "string"}},
+            },
+        },
+        "download": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "base_homeserver_url": {"type": "string"},
+                "proxy": {"type": "string"},
+                "allowed_mimetypes": {"type": "object"},
+            },
+        },
+        "crypto": {
+            "type": "object",
+            "required": ["pickle_path", "pickle_key"],
+            "additionalProperties": False,
+            "properties": {
+                "pickle_path": {"type": "string"},
+                "pickle_key": {"type": "string"},
+            },
+        },
+    },
+}
 
 
 @attr.s(auto_attribs=True, frozen=True)
 class WebConfig:
+    """Configuration for serving the HTTP API."""
+
     host: str
     port: int
 
 
 @attr.s(auto_attribs=True, frozen=True, slots=True)
 class ScanConfig:
+    """Configuration for scanning files."""
+
     script: str
     temp_directory: str
     do_not_cache_exit_codes: Optional[List[int]] = None
@@ -35,6 +91,8 @@ class ScanConfig:
 
 @attr.s(auto_attribs=True, frozen=True, slots=True)
 class DownloadConfig:
+    """Configuration for downloading files."""
+
     base_homeserver_url: Optional[str] = None
     proxy: Optional[str] = None
     additional_headers: Optional[Dict[str, str]] = None
@@ -42,48 +100,23 @@ class DownloadConfig:
 
 @attr.s(auto_attribs=True, frozen=True, slots=True)
 class CryptoConfig:
+    """Configuration for decrypting encrypted bodies."""
+
     pickle_path: str
     pickle_key: str
 
 
 class MatrixContentScannerConfig:
-    REQUIRED_SETTINGS = [
-        "web.host",
-        "web.port",
-        "scan.script",
-        "scan.temp_directory",
-        "crypto.pickle_path",
-        "crypto.pickle_key",
-    ]
-
     def __init__(self, config_dict: Dict[str, Any]):
         if not isinstance(config_dict, dict):
             raise ConfigError("Bad configuration format")
 
-        self._check_required(config_dict)
+        try:
+            validate(config_dict, _config_schema)
+        except ValidationError as e:
+            raise ConfigError(e.message)
 
         self.web = WebConfig(**(config_dict.get("web") or {}))
         self.scan = ScanConfig(**(config_dict.get("scan") or {}))
         self.crypto = CryptoConfig(**(config_dict.get("crypto") or {}))
         self.download = DownloadConfig(**(config_dict.get("download") or {}))
-
-    def _check_required(self, config_dict: Dict[str, Any]) -> None:
-        for setting in self.REQUIRED_SETTINGS:
-            try:
-                self._get_nested_property_at_key(config_dict, setting)
-            except KeyError:
-                raise ConfigError("Missing configuration setting %s" % setting)
-
-    def _get_nested_property_at_key(self, d: Dict[str, Any], key: str) -> Any:
-        parts = key.split(".")
-        prop = d[parts[0]]
-
-        if len(parts) == 1:
-            return prop
-
-        if not isinstance(prop, dict):
-            raise ConfigError(
-                "Expected configuration property %s to be a dictionary" % parts[0],
-            )
-
-        return self._get_nested_property_at_key(prop, ".".join(parts[1:]))

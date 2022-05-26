@@ -21,7 +21,7 @@ from twisted.web.http_headers import Headers
 from twisted.web.iweb import IAgent, IResponse
 
 from matrix_content_scanner import logging
-from matrix_content_scanner.utils.constants import ErrCodes
+from matrix_content_scanner.utils.constants import ErrCode
 from matrix_content_scanner.utils.errors import (
     ContentScannerRestError,
     WellKnownDiscoveryError,
@@ -124,7 +124,7 @@ class FileDownloader:
                 # If that still failed, raise an error.
                 raise ContentScannerRestError(
                     http_status=502,
-                    reason=ErrCodes.REQUEST_FAILED,
+                    reason=ErrCode.REQUEST_FAILED,
                     info="File not found",
                 )
 
@@ -200,8 +200,6 @@ class FileDownloader:
                 5xx error.
             ContentScannerRestError: the server returned a 5xx status.
         """
-        logger.info("Fetching file at URL: %s", url)
-
         code, body, headers = await self._get(url)
 
         logger.info("Remote server responded with %d", code)
@@ -224,7 +222,7 @@ class FileDownloader:
 
             raise ContentScannerRestError(
                 502,
-                ErrCodes.REQUEST_FAILED,
+                ErrCode.REQUEST_FAILED,
                 "The remote server responded with an error",
             )
 
@@ -233,7 +231,7 @@ class FileDownloader:
         if content_type_headers is None or len(content_type_headers) != 1:
             raise ContentScannerRestError(
                 502,
-                ErrCodes.REQUEST_FAILED,
+                ErrCode.REQUEST_FAILED,
                 "The remote server responded with an invalid amount of Content-Type headers",
             )
 
@@ -256,15 +254,14 @@ class FileDownloader:
 
         Raises:
             WellKnownDiscoveryError if an error happened during the discovery attempt.
-            twisted.internet.error.DNSLookupError if either the domain or the base URL it
-                advertises can't be reached.
+            twisted.internet.error.DNSLookupError if either the domain or the base URL
+                the .well-known client file advertises can't be reached.
         """
         if domain in self._well_known_cache:
             logger.info("Fetching well-known result from cache")
             return self._well_known_cache[domain]
 
         url = f"https://{domain}/.well-known/matrix/client"
-        logger.info("Fetching well-known at %s", url)
 
         code, body, _ = await self._get(url)
 
@@ -303,7 +300,20 @@ class FileDownloader:
         return base_url
 
     async def _get(self, url: str) -> Tuple[int, bytes, Headers]:
+        """Sends a GET request to the provided URL.
+
+        Args:
+            url: The URL to send requests to.
+
+        Returns:
+            The HTTP status code, body and headers the remote server responded with.
+
+        Raises:
+            ContentScannerRestError(502) if the request failed (if the remote server
+                timed out or refused the connection, etc.).
+        """
         try:
+            logger.info("Sending GET request to %s", url)
             resp: IResponse = await self._agent.request(
                 b"GET",
                 url.encode("ascii"),
@@ -313,7 +323,7 @@ class FileDownloader:
             logger.error(e)
             raise ContentScannerRestError(
                 502,
-                ErrCodes.REQUEST_FAILED,
+                ErrCode.REQUEST_FAILED,
                 "Failed to reach the remote server",
             )
 

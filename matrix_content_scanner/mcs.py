@@ -18,13 +18,7 @@ from functools import cached_property
 
 import twisted.internet.reactor
 import yaml
-from twisted.internet.interfaces import (
-    IReactorCore,
-    IReactorPluggableNameResolver,
-    IReactorSSL,
-    IReactorTCP,
-    IReactorTime,
-)
+from twisted.internet.interfaces import IReactorCore, IReactorTCP
 from twisted.python import log
 from yaml.scanner import ScannerError
 
@@ -42,10 +36,9 @@ logger = mcs_logging.getLogger(__name__)
 class Reactor(
     IReactorCore,
     IReactorTCP,
-    IReactorSSL,
-    IReactorTime,
-    IReactorPluggableNameResolver,
 ):
+    """A dummy class we use to tell mypy the reactor we're using has the methods we need."""
+
     pass
 
 
@@ -80,16 +73,22 @@ class MatrixContentScanner:
 
 def setup_logging() -> None:
     """Basic logging setup."""
+    # Set the format, this assumes every logger is created by
+    # matrix_content_scanner.logging.getLogger and has custom request_type and
+    # media_path fields set.
     log_format = "%(asctime)s - %(name)s - %(lineno)d - %(levelname)s - %(request_type)s - %(media_path)s - %(message)s"
     formatter = logging.Formatter(log_format)
 
+    # Create the handler and set the default logging level to INFO.
     handler = logging.StreamHandler()
-
     handler.setFormatter(formatter)
     rootLogger = logging.getLogger("")
-    rootLogger.setLevel("INFO")
+    rootLogger.setLevel(logging.INFO)
     rootLogger.addHandler(handler)
 
+    # Set the twisted logger to WARNING so that it doesn't try to log too much.
+    # This is done partly because Twisted doesn't use our custom LoggingAdapter and thus
+    # don't log with the request_type and media_path fields.
     logging.getLogger("twisted").setLevel(logging.WARNING)
 
     observer = log.PythonLoggingObserver()

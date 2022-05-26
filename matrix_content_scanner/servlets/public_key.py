@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
 
 class PublicKeyServlet(JsonResource):
+    """Handles GET requests to .../public_key"""
+
     def __init__(self, content_scanner: "MatrixContentScanner") -> None:
         super().__init__()
         self._crypto_handler = content_scanner.crypto_handler

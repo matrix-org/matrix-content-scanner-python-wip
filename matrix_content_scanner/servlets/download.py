@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 
 
 class DownloadServlet(BytesResource):
+    """Handles GET requests to .../download/serverName/mediaId"""
+
     isLeaf = True
 
     def __init__(self, content_scanner: "MatrixContentScanner"):
@@ -41,6 +43,8 @@ class DownloadServlet(BytesResource):
 
 
 class DownloadEncryptedServlet(BytesResource):
+    """Handles POST requests to .../download_encrypted"""
+
     def __init__(self, content_scanner: "MatrixContentScanner"):
         super().__init__()
         self._scanner = content_scanner.scanner

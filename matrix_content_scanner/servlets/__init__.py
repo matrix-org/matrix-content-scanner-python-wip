@@ -22,11 +22,7 @@ from twisted.web.server import NOT_DONE_YET
 
 from matrix_content_scanner import logging
 from matrix_content_scanner.crypto import CryptoHandler
-from matrix_content_scanner.logging import (
-    set_context_from_request,
-    set_media_path_in_context,
-)
-from matrix_content_scanner.utils.constants import ErrCodes
+from matrix_content_scanner.utils.constants import ErrCode
 from matrix_content_scanner.utils.encrypted_file_metadata import (
     validate_encrypted_file_metadata,
 )
@@ -44,46 +40,76 @@ class _AsyncResource(Resource, metaclass=abc.ABCMeta):
 
     async def _async_render(self, request: Request) -> None:
         """Processes the incoming request asynchronously and handles errors."""
+        # Treat HEAD requests as GET requests.
+        request_method = request.method.decode("ascii")
+        if request_method == "HEAD":
+            request_method = "GET"
+
+        # Try to set the context from the request.
+        logging.set_context_from_request(request)
+
+        # Try to find a handler for this request.
+        method_handler: Callable[[Request], Awaitable[Tuple[int, Any]]] = getattr(
+            self, "on_%s" % (request_method,), None
+        )  # type: ignore[assignment]
+        if not method_handler:
+            # If we don't have a handler, respond with a 404.
+            self._send_error(
+                request=request,
+                status=404,
+                reason=ErrCode.NOT_FOUND,
+                info="Route not found",
+            )
+            return
+
         try:
-            # Treat HEAD requests as GET requests.
-            request_method = request.method.decode("ascii")
-            if request_method == "HEAD":
-                request_method = "GET"
-
-            method_handler: Callable[[Request], Awaitable[Tuple[int, Any]]] = getattr(
-                self, "on_%s" % (request_method,), None
-            )  # type: ignore[assignment]
-            if not method_handler:
-                raise ContentScannerRestError(
-                    404, ErrCodes.NOT_FOUND, "Route not found"
-                )
-
-            set_context_from_request(request)
-
+            # We have a request handler: call it and send the response.
             code, response = await method_handler(request)
-
             self._log(request, code)
-
             self._send_response(request, code, response)
         except ContentScannerRestError as e:
+            # If we get a REST error, use it to generate an error response.
             self._send_error(
-                request, e.http_status, {"reason": e.reason, "info": e.info}
+                request=request,
+                status=e.http_status,
+                reason=e.reason,
+                info=e.info,
             )
         except Exception as e:
+            # Otherwise, just treat it as an unknown server error.
             logger.exception(e)
             self._send_error(
-                request, 500, {"reason": "M_UNKNOWN", "info": "Internal Server Error"}
+                request=request,
+                status=500,
+                reason=ErrCode.UNKNOWN,
+                info="Internal Server Error",
             )
 
-    def _send_error(self, request: Request, status: int, content: JsonDict) -> None:
+    def _send_error(
+        self, request: Request, status: int, reason: ErrCode, info: str
+    ) -> None:
+        """Send an error response with the provided parameters.
+
+        Args:
+            request: The request to respond to.
+            status: The HTTP status to respond with.
+            reason: The error code to include in the response.
+            info: Additional human-readable info to include in the response.
+        """
         self._log(request, status)
         request.setResponseCode(status)
         request.setHeader("Content-Type", "application/json")
-        res = _dict_to_json_bytes(content)
+        res = _to_json_bytes({"reason": reason, "info": info})
         request.write(res)
         request.finish()
 
     def _log(self, request: Request, status: int) -> None:
+        """Logs that a request has finished processing.
+
+        Args:
+            request: The request that has finished processing.
+            status: The HTTP status that the request has been responded to with.
+        """
         if request.path is not None:
             path = request.path.decode("utf-8")
         else:
@@ -100,9 +126,16 @@ class _AsyncResource(Resource, metaclass=abc.ABCMeta):
     def _send_response(
         self,
         request: Request,
-        code: int,
-        response_object: Any,
+        status: int,
+        response_content: Any,
     ) -> None:
+        """Responds to the request with the given content.
+
+        Args:
+            request: The request to respond to.
+            status: The HTTP status to respond to the request with.
+            response_content: The content to respond with.
+        """
         raise NotImplementedError()
 
 
@@ -112,19 +145,18 @@ class JsonResource(_AsyncResource):
     """
 
     def _send_response(
-        self,
-        request: Request,
-        code: int,
-        response_object: Any,
+        self, request: Request, status: int, response_content: Any
     ) -> None:
-        """Implements _AsyncResource._send_response"""
-        request.setResponseCode(code)
+        """Implements _AsyncResource._send_response. Expects response_content to be
+        serialisable into JSON.
+        """
+        request.setResponseCode(status)
         request.setHeader("Content-Type", "application/json")
-        request.write(_dict_to_json_bytes(response_object))
+        request.write(_to_json_bytes(response_content))
         request.finish()
 
 
-def _dict_to_json_bytes(content: JsonDict) -> bytes:
+def _to_json_bytes(content: JsonDict) -> bytes:
     """Converts a dict into JSON and encodes it to bytes."""
     return json.dumps(content).encode("UTF-8")
 
@@ -135,29 +167,37 @@ class BytesResource(_AsyncResource):
     """
 
     def _send_response(
-        self,
-        request: Request,
-        code: int,
-        response_object: Any,
+        self, request: Request, status: int, response_content: Any
     ) -> None:
         """Implements _AsyncResource._send_response. Expects the child class to have
-        already set the content type header.
+        already set the content type header. Also expects response_content to be bytes.
         """
-        # We expect to get bytes for us to write
-        assert isinstance(response_object, bytes)
-        request.setResponseCode(code)
-        request.write(response_object)
+        assert isinstance(response_content, bytes)
+        request.setResponseCode(status)
+        request.write(response_content)
         request.finish()
 
 
 def get_media_metadata_from_request(
     request: Request, crypto_handler: CryptoHandler
 ) -> Tuple[str, JsonDict]:
+    """Extracts, optionally decrypts, and validates encrypted file metadata from a
+    request body.
+
+    Args:
+        request: The request to extract the data from.
+        crypto_handler: The crypto handler to use if we need to decrypt an Olm-encrypted
+            body.
+
+    Raises:
+        ContentScannerRestError(400) if the request's body is None or if the metadata
+            didn't pass schema validation.
+    """
     if request.content is None:
         raise ContentScannerRestError(
             400,
-            ErrCodes.MALFORMED_JSON,
-            "No content on request",
+            ErrCode.MALFORMED_JSON,
+            "No content in request body",
         )
 
     body = request.content.read().decode("ascii")
@@ -166,23 +206,37 @@ def get_media_metadata_from_request(
 
     validate_encrypted_file_metadata(metadata)
 
+    # Get the media path and set the context.
     url = metadata["file"]["url"]
     media_path = url[len("mxc://") :]
-    set_media_path_in_context(media_path)
+    logging.set_media_path_in_context(media_path)
 
     return media_path, metadata
 
 
 def _metadata_from_body(body: str, crypto_handler: CryptoHandler) -> JsonDict:
+    """Parse the given body as JSON, and decrypts it if needed.
+
+    Args:
+        body: The body to parse.
+        crypto_handler: The crypto handler to use if we need to decrypt an Olm-encrypted
+            body.
+
+    Returns:
+        The parsed and decrypted file metadata.
+
+    Raises:
+        ContentScannerRestError(400) if the body isn't valid JSON or isn't a dictionary.
+    """
     try:
         parsed_body = json.loads(body)
     except json.decoder.JSONDecodeError as e:
-        raise ContentScannerRestError(400, ErrCodes.MALFORMED_JSON, str(e))
+        raise ContentScannerRestError(400, ErrCode.MALFORMED_JSON, str(e))
 
     if not isinstance(parsed_body, dict):
         raise ContentScannerRestError(
             400,
-            ErrCodes.MALFORMED_JSON,
+            ErrCode.MALFORMED_JSON,
             "Body must be a dictionary",
         )
 
