@@ -17,7 +17,9 @@ from typing import TYPE_CHECKING, Any, Optional, Tuple
 
 from twisted.web.http import Request
 
+# The serverName/mediaId path of the media.
 media_path: ContextVar[str] = ContextVar("media_path")
+# The request being performed (download, thumbnail, scan, etc).
 request_type: ContextVar[str] = ContextVar("request_type")
 
 if TYPE_CHECKING:
