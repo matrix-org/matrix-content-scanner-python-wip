@@ -12,6 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import json
+import logging
 import urllib.parse
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
@@ -20,7 +21,6 @@ from twisted.web.client import Agent, BrowserLikePolicyForHTTPS, ProxyAgent, rea
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IAgent, IResponse
 
-from matrix_content_scanner import logging
 from matrix_content_scanner.utils.constants import ErrCode
 from matrix_content_scanner.utils.errors import (
     ContentScannerRestError,

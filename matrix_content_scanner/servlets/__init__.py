@@ -13,6 +13,7 @@
 #  limitations under the License.
 import abc
 import json
+import logging
 from typing import Any, Awaitable, Callable, Optional, Tuple
 
 from twisted.internet import defer
@@ -20,7 +21,7 @@ from twisted.web.http import Request
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
-from matrix_content_scanner import logging
+from matrix_content_scanner import logutils
 from matrix_content_scanner.crypto import CryptoHandler
 from matrix_content_scanner.utils.constants import ErrCode
 from matrix_content_scanner.utils.encrypted_file_metadata import (
@@ -46,7 +47,7 @@ class _AsyncResource(Resource, metaclass=abc.ABCMeta):
             request_method = "GET"
 
         # Try to set the context from the request.
-        logging.set_context_from_request(request)
+        logutils.set_context_from_request(request)
 
         # Try to find a handler for this request.
         method_handler: Callable[[Request], Awaitable[Tuple[int, Any]]] = getattr(
@@ -65,7 +66,6 @@ class _AsyncResource(Resource, metaclass=abc.ABCMeta):
         try:
             # We have a request handler: call it and send the response.
             code, response = await method_handler(request)
-            self._log(request, code)
             self._send_response(request, code, response)
         except ContentScannerRestError as e:
             # If we get a REST error, use it to generate an error response.
@@ -96,31 +96,11 @@ class _AsyncResource(Resource, metaclass=abc.ABCMeta):
             reason: The error code to include in the response.
             info: Additional human-readable info to include in the response.
         """
-        self._log(request, status)
         request.setResponseCode(status)
         request.setHeader("Content-Type", "application/json")
         res = _to_json_bytes({"reason": str(reason), "info": info})
         request.write(res)
         request.finish()
-
-    def _log(self, request: Request, status: int) -> None:
-        """Logs that a request has finished processing.
-
-        Args:
-            request: The request that has finished processing.
-            status: The HTTP status that the request has been responded to with.
-        """
-        if request.path is not None:
-            path = request.path.decode("utf-8")
-        else:
-            path = None
-
-        logger.info(
-            "Processed request %s %s (%d)",
-            request.method.decode("ascii"),
-            path,
-            status,
-        )
 
     @abc.abstractmethod
     def _send_response(
@@ -209,7 +189,7 @@ def get_media_metadata_from_request(
     # Get the media path and set the context.
     url = metadata["file"]["url"]
     media_path = url[len("mxc://") :]
-    logging.set_media_path_in_context(media_path)
+    logutils.set_media_path_in_context(media_path)
 
     return media_path, metadata
 
