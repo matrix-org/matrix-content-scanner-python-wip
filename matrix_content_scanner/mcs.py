@@ -79,7 +79,7 @@ def setup_logging() -> None:
     log_format = "%(asctime)s - %(name)s - %(lineno)d - %(levelname)s - %(request_type)s - %(media_path)s - %(message)s"
     formatter = logging.Formatter(log_format)
 
-    logging.setLogRecordFactory(logutils.get_factory())
+    logutils.setup_custom_factory()
 
     # Create the handler and set the default logging level to INFO.
     handler = logging.StreamHandler()

@@ -13,7 +13,7 @@
 #  limitations under the License.
 import logging
 from contextvars import ContextVar
-from typing import Any, Callable
+from typing import Any
 
 from twisted.web.http import Request
 
@@ -23,16 +23,24 @@ media_path: ContextVar[str] = ContextVar("media_path")
 request_type: ContextVar[str] = ContextVar("request_type")
 
 
-def get_factory() -> Callable[..., logging.LogRecord]:
+def setup_custom_factory() -> None:
+    """Generates a new record factory, chained to the current factory, and sets it as the
+    new default record factory.
+
+    The new factory adds attributes for the media path and request type to log records,
+    and populates them using the matching ContextVars;
+    """
     old_factory = logging.getLogRecordFactory()
 
     def _factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
         record = old_factory(*args, **kwargs)
+        # Define custom attributes on the records. We need to ignore the types here
+        # because otherwise mypy complains the attributes aren't defined on LogRecord.
         record.media_path = media_path.get(None)  # type: ignore[attr-defined]
         record.request_type = request_type.get(None)  # type: ignore[attr-defined]
         return record
 
-    return _factory
+    logging.setLogRecordFactory(_factory)
 
 
 def set_context_from_request(request: Request) -> None:
