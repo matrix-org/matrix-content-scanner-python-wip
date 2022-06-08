@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Tuple, Union
 
 from twisted.web.http import Request
 
+from matrix_content_scanner import logutils
 from matrix_content_scanner.servlets import (
     BytesResource,
     get_media_metadata_from_request,
@@ -36,8 +37,10 @@ class DownloadServlet(BytesResource):
 
     async def on_GET(self, request: Request) -> Tuple[int, Union[bytes, JsonDict]]:
         # mypy doesn't recognise request.postpath but it does exist and is documented.
-        media_path: bytes = b"/".join(request.postpath)  # type: ignore[attr-defined]
-        media = await self._scanner.scan_file(media_path.decode("ascii"))
+        media_path_bytes: bytes = b"/".join(request.postpath)  # type: ignore[attr-defined]
+        media_path = media_path_bytes.decode("ascii")
+        logutils.set_media_path_in_context(media_path)
+        media = await self._scanner.scan_file(media_path)
         request.responseHeaders = media.response_headers
         return 200, media.content
 

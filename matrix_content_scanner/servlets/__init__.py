@@ -46,8 +46,13 @@ class _AsyncResource(Resource, metaclass=abc.ABCMeta):
         if request_method == "HEAD":
             request_method = "GET"
 
-        # Try to set the context from the request.
-        logutils.set_context_from_request(request)
+        # Set the request type in the logging context.
+        assert request.path is not None
+        parts = request.path.split(b"/")
+        # Paths in the content scanner API use the form
+        # "/_matrix/media_proxy/unstable/{requestType}/...", so the request type is at
+        # index 4 in the parts.
+        logutils.set_request_type_in_context(parts[4].decode("ascii"))
 
         # Try to find a handler for this request.
         method_handler: Callable[[Request], Awaitable[Tuple[int, Any]]] = getattr(
