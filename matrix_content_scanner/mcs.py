@@ -88,11 +88,6 @@ def setup_logging() -> None:
     rootLogger.setLevel(logging.INFO)
     rootLogger.addHandler(handler)
 
-    # Set the twisted logger to WARNING so that it doesn't try to log too much.
-    # This is done partly because Twisted doesn't use our custom LoggingAdapter and thus
-    # don't log with the request_type and media_path fields.
-    # logging.getLogger("twisted").setLevel(logging.WARNING)
-
     observer = log.PythonLoggingObserver()
     observer.start()
 
