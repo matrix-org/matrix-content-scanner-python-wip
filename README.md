@@ -35,7 +35,7 @@ Where `CONFIG_FILE` is the path to your configuration file.
 See [the API documentation](/docs/api.md) for information about how clients are expected
 to interact with the Matrix Content Scanner.
 
-### Migrating from the [legacy Matrix Content Scanner](https://github.com/matrix-org/matrix-content-scanner)
+## Migrating from the [legacy Matrix Content Scanner](https://github.com/matrix-org/matrix-content-scanner)
 
 Because it uses the same APIs and Olm pickle format as the legacy Matrix Content Scanner,
 this project can be used as a drop-in replacement. The only change (apart from the
