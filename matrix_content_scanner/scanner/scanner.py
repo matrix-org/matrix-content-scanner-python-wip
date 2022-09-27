@@ -12,16 +12,18 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import hashlib
-import json
 import logging
-import os.path
+import os
 import subprocess
-from typing import TYPE_CHECKING, Dict, List, Optional
+from pathlib import Path
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import attr
+from cachetools import TTLCache
+from canonicaljson import encode_canonical_json
+from humanfriendly import format_size
 from mautrix.crypto.attachments import decrypt_attachment
 from mautrix.errors import DecryptionError
-from mautrix.util import magic
 
 from matrix_content_scanner.utils.constants import ErrCode
 from matrix_content_scanner.utils.errors import ContentScannerRestError, FileDirtyError
@@ -35,8 +37,22 @@ logger = logging.getLogger(__name__)
 
 @attr.s(auto_attribs=True, frozen=True)
 class CacheEntry:
+    """An entry in the scanner's result cache."""
+
+    # The result of the scan: True if the scan passed, False otherwise.
     result: bool
+
+    # The media that was scanned, so we can return it in future requests. We only cache
+    # it if the scan succeeded and the file's size does not exceed the configured limit,
+    # otherwise it's None.
     media: Optional[MediaDescription] = None
+
+    # Hash of the media content, so we can make sure no malicious servers changed the file
+    # since we've scanned it (e.g. if we need to re-download it because the file was too
+    # big). None if the scan failed.
+    media_hash: Optional[str] = None
+
+    # Info to include in the FileDirtyError if the scan failed.
     info: Optional[str] = None
 
 
@@ -44,11 +60,23 @@ class Scanner:
     def __init__(self, mcs: "MatrixContentScanner"):
         self._file_downloader = mcs.file_downloader
         self._script = mcs.config.scan.script
-        self._result_cache: Dict[str, CacheEntry] = {}
-        self._exit_codes_to_ignore = mcs.config.scan.do_not_cache_exit_codes
         self._removal_command = mcs.config.scan.removal_command
-        self._store_directory = os.path.abspath(mcs.config.scan.temp_directory)
-        self._allowed_mimetypes = mcs.config.scan.allowed_mimetypes
+        self._store_directory = Path(mcs.config.scan.temp_directory).resolve(
+            strict=True
+        )
+
+        # Result cache settings.
+        self._result_cache: TTLCache[str, CacheEntry] = TTLCache(
+            maxsize=mcs.config.result_cache.max_size,
+            ttl=mcs.config.result_cache.ttl,
+        )
+
+        if mcs.config.result_cache.exit_codes_to_ignore is None:
+            self._exit_codes_to_ignore = []
+        else:
+            self._exit_codes_to_ignore = mcs.config.result_cache.exit_codes_to_ignore
+
+        self._max_size_to_cache = mcs.config.result_cache.max_file_size
 
     async def scan_file(
         self,
@@ -62,7 +90,8 @@ class Scanner:
         also cache the result.
 
         If the file already has an entry in the result cache, return this value without
-        downloading the file again.
+        downloading the file again (unless we purposefully did not cache the file's
+        content to save up on memory).
 
         Args:
             media_path: The `server_name/media_id` path for the media.
@@ -82,95 +111,159 @@ class Scanner:
         # Compute the cache key for the media.
         cache_key = self._get_cache_key_for_file(media_path, metadata, thumbnail_params)
 
+        # The media to scan.
+        media: Optional[MediaDescription] = None
+
         # Return the cached result if there's one.
-        if cache_key in self._result_cache:
-            cache_entry = self._result_cache[cache_key]
-            logger.info("Returning cached result %s", cache_entry.result)
+        cache_entry = self._result_cache.get(cache_key)
+        if cache_entry is not None:
+            logger.info("Found a cached result %s", cache_entry.result)
 
             if cache_entry.result is False:
-                # If we defined additional info when caching the error, feed that into
-                # the new error.
-                if cache_entry.info is not None:
-                    raise FileDirtyError(info=cache_entry.info)
-                else:
-                    raise FileDirtyError()
-            else:
-                if cache_entry.media is not None:
-                    return cache_entry.media
+                # Feed the additional info we might have added when caching the error,
+                # into the new error.
+                raise FileDirtyError(info=cache_entry.info)
 
-                logger.warning(
-                    "Result cache is confused: missing media but result is True.",
-                )
+            if cache_entry.media is not None:
+                return cache_entry.media
+
+            # If we don't have the media cached
+            logger.info(
+                "Got a positive result from cache without a media, downloading file",
+            )
+
+            media = await self._file_downloader.download_file(
+                media_path=media_path,
+                thumbnail_params=thumbnail_params,
+            )
+
+            # Compare the media's hash to ensure the server hasn't changed the file since
+            # the last scan. If it has changed, shout about it in the logs, discard the
+            # cache entry and scan it again.
+            media_hash = hashlib.sha256(media.content).hexdigest()
+            if media_hash == cache_entry.media_hash:
+                return media
+
+            logger.warning(
+                "Media has changed since last scan (cached hash: %s, new hash: %s),"
+                " discarding cached result and scanning again",
+                cache_entry.media_hash,
+                media_hash,
+            )
+
+            del self._result_cache[cache_key]
 
         # Check if the media path is valid and only contains one slash (otherwise we'll
         # have issues parsing it further down the line).
         if media_path.count("/") != 1:
+            info = "Malformed media ID"
             self._result_cache[cache_key] = CacheEntry(
                 result=False,
-                info="Malformed media ID",
+                info=info,
             )
-            raise FileDirtyError("Malformed media ID")
+            raise FileDirtyError(info)
 
-        # Download the file, and decrypt it if necessary.
-        media = await self._file_downloader.download_file(
-            media_path=media_path,
-            thumbnail_params=thumbnail_params,
-        )
+        # Download the file if we don't already have it.
+        if media is None:
+            media = await self._file_downloader.download_file(
+                media_path=media_path,
+                thumbnail_params=thumbnail_params,
+            )
 
+        # Download and scan the file.
+        try:
+            media, cacheable = await self._scan_media(media, media_path, metadata)
+        except FileDirtyError as e:
+            if e.cacheable:
+                logger.info("Caching scan failure")
+
+                # If the test fails, don't store the media to save memory.
+                self._result_cache[cache_key] = CacheEntry(
+                    result=False,
+                    media=None,
+                    info=e.info,
+                )
+
+            raise
+
+        # Update the cache if the result should be cached.
+        if cacheable:
+            logger.info("Caching scan success")
+
+            cached_media: Optional[MediaDescription] = media
+
+            if (
+                self._max_size_to_cache is not None
+                and len(media.content) > self._max_size_to_cache
+            ):
+
+                # Don't cache the file's content if it exceeds the maximum allowed file
+                # size, to minimise memory usage.
+                logger.info(
+                    "File content has size %s, which is more than %s, not caching content",
+                    format_size(len(media.content)),
+                    format_size(self._max_size_to_cache),
+                )
+
+                cached_media = None
+
+            # Hash the media, that way if we need to re-download the file we can make sure
+            # it's the right one. We get a hex digest in case we want to print it later.
+            media_hash = hashlib.sha256(media.content).hexdigest()
+
+            self._result_cache[cache_key] = CacheEntry(
+                result=True,
+                media=cached_media,
+                media_hash=media_hash,
+            )
+
+        return media
+
+    async def _scan_media(
+        self,
+        media: MediaDescription,
+        media_path: str,
+        metadata: Optional[JsonDict] = None,
+    ) -> Tuple[MediaDescription, bool]:
+        """Scans the given media.
+
+        Args:
+            media: The already downloaded media. If provided, the download step is
+                skipped. Usually provided if we've re-downloaded a file with a cached
+                result, but the file changed since the initial scan.
+            media_path: The `server_name/media_id` path for the media.
+            metadata: The metadata attached to the file (e.g. decryption key), or None if
+                the file isn't encrypted.
+
+        Returns:
+            A description of the media, as well as a boolean indicating whether the
+            successful scan result should be cached or not.
+
+        Raises:
+            FileDirtyError if the result of the scan said that the file is dirty, or if
+                the media path is malformed.
+        """
+
+        # Decrypt the content if necessary.
         media_content = media.content
         if metadata is not None:
             # If the file is encrypted, we need to decrypt it before we can scan it.
             media_content = self._decrypt_file(media_content, metadata)
 
-        # Check the file's MIME type to see if it's allowed and, if the file is not
-        # encrypted, if it matches the Content-Type header the homeserver sent us.
-        try:
-            self._check_mimetype(
-                media_content=media_content,
-                content_type_header=media.content_type,
-                encrypted=metadata is not None,
-            )
-        except FileDirtyError as e:
-            self._result_cache[cache_key] = CacheEntry(
-                result=False,
-                info=e.info,
-            )
-            raise
-
         # Write the file to disk.
-        try:
-            file_path = self._write_file_to_disk(media_path, media_content)
-        except FileDirtyError as e:
-            # A FileDirtyError will be raised if the media path is built in a way that
-            # can lead to writing outside of the configured directory.
-            self._result_cache[cache_key] = CacheEntry(
-                result=False,
-                info=e.info,
-            )
-            raise
+        file_path = self._write_file_to_disk(media_path, media_content)
 
         # Scan the file and see if the result is positive or negative.
         exit_code = self._run_scan(file_path)
         result = exit_code == 0
 
         # If the exit code isn't part of the ones we should ignore, cache the result.
-        if (
-            self._exit_codes_to_ignore is None
-            or exit_code not in self._exit_codes_to_ignore
-        ):
-            logger.info("Caching result %s", result)
-
-            # Only cache the media if the scan is successful, because this means we might
-            # need to show it to the user again. If the test fails, don't store it to save
-            # memory.
-            self._result_cache[cache_key] = CacheEntry(
-                result=result,
-                media=media if result is True else None,
-            )
-        else:
+        cacheable = True
+        if exit_code in self._exit_codes_to_ignore:
             logger.info(
                 "Scan returned exit code %d which must not be cached", exit_code
             )
+            cacheable = False
 
         # Delete the file now that we've scanned it.
         logger.info("Scan has finished, removing file")
@@ -180,9 +273,9 @@ class Scanner:
 
         # Raise an error if the result isn't clean.
         if result is False:
-            raise FileDirtyError()
+            raise FileDirtyError(cacheable=cacheable)
 
-        return media
+        return media, cacheable
 
     def _get_cache_key_for_file(
         self,
@@ -206,11 +299,14 @@ class Scanner:
                 is passed, this will be an empty dict. If the media being requested is not
                 a thumbnail, this will be None.
         """
-        raw_metadata = json.dumps(metadata)
-        raw_params = json.dumps(thumbnail_params)
-        base_string = media_path + raw_metadata + raw_params
+        hash = hashlib.sha256()
+        hash.update(media_path.encode("utf8"))
+        hash.update(b"\0")
+        hash.update(encode_canonical_json(metadata))
+        hash.update(b"\0")
+        hash.update(encode_canonical_json(thumbnail_params))
 
-        return hashlib.sha256(base_string.encode("ascii")).hexdigest()
+        return hash.hexdigest()
 
     def _decrypt_file(self, body: bytes, metadata: JsonDict) -> bytes:
         """Extract decryption information from the file's metadata and decrypt it.
@@ -258,23 +354,25 @@ class Scanner:
             FileDirtyError if the media path is malformed in a way that would cause the
                 file to be written outside the configured directory.
         """
-        # Figure out the full absolute path for this file. Given _store_directory is
-        # already an absolute path using os.path.join is likely good enough, but we want
-        # to make sure there isn't any '..' etc in the full path, to make sure we don't
-        # try to write outside the directory.
-        full_path = os.path.abspath(os.path.join(self._store_directory, media_path))
-        if not full_path.startswith(self._store_directory):
+        # Figure out the full absolute path for this file.
+        full_path = self._store_directory.joinpath(media_path).resolve()
+        try:
+            # Check if the full path is a sub-path to the store's path, to make sure
+            # there isn't any '..' etc. in the full path, which would cause us to try
+            # writing outside the store's directory.
+            full_path.relative_to(self._store_directory)
+        except ValueError:
             raise FileDirtyError("Malformed media ID")
 
         logger.info("Writing file to %s", full_path)
 
         # Create any directory we need.
-        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        os.makedirs(full_path.parent, exist_ok=True)
 
         with open(full_path, "wb") as fp:
             fp.write(body)
 
-        return full_path
+        return str(full_path)
 
     def _run_scan(self, file_name: str) -> int:
         """Runs the scan script, passing it the given file name.
@@ -292,54 +390,3 @@ class Scanner:
         except subprocess.CalledProcessError as e:
             logger.info("Scan failed with exit code %d: %s", e.returncode, e.stderr)
             return e.returncode
-
-    def _check_mimetype(
-        self,
-        media_content: bytes,
-        content_type_header: str,
-        encrypted: bool,
-    ) -> None:
-        """Reads the MIME type of the provided bytes, and checks that:
-
-        * it matches with the Content-Type header that was received when downloading this
-            file (if the media isn't encrypted, since otherwise the Content-Type header
-            is always 'application/octet-stream')
-        * files with this MIME type are allowed (if an allow list is provided in the
-            configuration)
-
-        Args:
-            media_content: The file's content. If the file is encrypted, this is its
-                decrypted content.
-            content_type_header: The value of the Content-Type header received when
-                downloading the file.
-            encrypted: Whether the file was encrypted (in which case we don't want to
-                check that its MIME type matches with the Content-Type header).
-
-        Raises:
-            FileDirtyError if one of the checks fail.
-        """
-        mimetype = magic.mimetype(media_content)
-        logger.info("MIME type for file is %s", mimetype)
-
-        # Check if the MIME type is matching the one that's expected, but only if the file
-        # is not encrypted (because otherwise we'll always have 'application/octet-stream'
-        # in the Content-Type header regardless of the actual MIME type of the file).
-        if encrypted is False and mimetype != content_type_header:
-            logger.error(
-                "Mismatching MIME type (%s) and Content-Type header (%s)",
-                mimetype,
-                content_type_header,
-            )
-            raise FileDirtyError("File type not supported")
-
-        # If there's an allow list for MIME types, check that the MIME type that's been
-        # detected for this file is in it.
-        if (
-            self._allowed_mimetypes is not None
-            and mimetype not in self._allowed_mimetypes
-        ):
-            logger.error(
-                "MIME type for file is forbidden: %s",
-                mimetype,
-            )
-            raise FileDirtyError("File type not supported")
