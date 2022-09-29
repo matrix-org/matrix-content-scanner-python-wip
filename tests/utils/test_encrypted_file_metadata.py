@@ -19,32 +19,16 @@ from matrix_content_scanner.utils.encrypted_file_metadata import (
     validate_encrypted_file_metadata,
 )
 from matrix_content_scanner.utils.errors import ContentScannerRestError
-from matrix_content_scanner.utils.types import JsonDict
-
-BASE_METADATA: JsonDict = {
-    "file": {
-        "v": "v2",
-        "key": {
-            "alg": "A256CTR",
-            "ext": True,
-            "k": "F3miZm2vZhucJ062AuKMUwmd-O6AK0AXP29p4MKtq3Q",
-            "key_ops": ["decrypt", "encrypt"],
-            "kty": "oct",
-        },
-        "iv": "rJqtSdi3F/EAAAAAAAAAAA",
-        "hashes": {"sha256": "NYvGRRQGfyWpXSUpba+ozSbehFP6kw5ZDg0xMppyX8c"},
-        "url": "mxc://foo/bar",
-    }
-}
+from tests.testutils import ENCRYPTED_FILE_METADATA
 
 
 class EncryptedMetadataValidationTestCase(unittest.TestCase):
     def setUp(self) -> None:
-        self.metadata = copy.deepcopy(BASE_METADATA)
+        self.metadata = copy.deepcopy(ENCRYPTED_FILE_METADATA)
 
     def test_validate(self) -> None:
         """Tests that valid file metadata is considered as such."""
-        validate_encrypted_file_metadata(BASE_METADATA)
+        validate_encrypted_file_metadata(ENCRYPTED_FILE_METADATA)
 
     def test_key_ops_no_decrypt(self) -> None:
         """Tests that the metadata validation fails if key_ops doesn't include `decrypt`."""
@@ -55,6 +39,13 @@ class EncryptedMetadataValidationTestCase(unittest.TestCase):
         """Tests that the metadata validation fails if key_ops doesn't include `encrypt`."""
         self.metadata["file"]["key"]["key_ops"] = ["decrypt"]
         self._test_fails_validation()
+
+    def test_ops_extra_values(self) -> None:
+        """tests that the metadata validation does not fail if there are extra values in
+        key_ops.
+        """
+        self.metadata["file"]["key"]["key_ops"].append("foo")
+        validate_encrypted_file_metadata(self.metadata)
 
     def test_no_file(self) -> None:
         """Tests that the metadata validation fails if there isn't a `file` property."""
@@ -71,6 +62,34 @@ class EncryptedMetadataValidationTestCase(unittest.TestCase):
         property.
         """
         del self.metadata["file"]["key"]["k"]
+        self._test_fails_validation()
+
+    def test_no_ext(self) -> None:
+        """Tests that the metadata validation fails if there isn't a `file.key.ext`
+        property.
+        """
+        del self.metadata["file"]["key"]["ext"]
+        self._test_fails_validation()
+
+    def test_bad_ext(self) -> None:
+        """Tests that the metadata validation fails if the `file.key.ext` property has an
+        invalid value.
+        """
+        self.metadata["file"]["key"]["ext"] = False
+        self._test_fails_validation()
+
+    def test_bad_alg(self) -> None:
+        """Tests that the metadata validation fails if the `file.key.alg` property has an
+        invalid value.
+        """
+        self.metadata["file"]["key"]["alg"] = "bad"
+        self._test_fails_validation()
+
+    def test_bad_kty(self) -> None:
+        """Tests that the metadata validation fails if the `file.key.kty` property has an
+        invalid value.
+        """
+        self.metadata["file"]["key"]["kty"] = "bad"
         self._test_fails_validation()
 
     def test_no_iv(self) -> None:
